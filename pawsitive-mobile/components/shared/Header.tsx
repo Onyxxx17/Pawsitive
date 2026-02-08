@@ -1,79 +1,84 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  useWindowDimensions,
-} from 'react-native';
+import { View, Text, TouchableOpacity, Image, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
-import { usePetsStore } from '@/store/pets';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function Header() {
-  const { width } = useWindowDimensions();
-  const { pets, currentPetId, setCurrentPet } = usePetsStore();
-  const currentPet = pets.find(p => p.id === currentPetId);
-
   return (
-    <View style={[styles.header, { width }]}>
-      {/* Menu Button */}
-      <TouchableOpacity style={styles.iconButton}>
-        <Ionicons name="menu-outline" size={24} color={Colors.primary.brown} />
-      </TouchableOpacity>
+    <View style={{ backgroundColor: Colors.neutral.background }}>
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
+        <View style={styles.container}>
+          {/* Left: Profile / Menu */}
+          <TouchableOpacity style={styles.iconButton}>
+            <Ionicons name="menu" size={24} color={Colors.primary.brown} />
+          </TouchableOpacity>
 
-      {/* Pet Selector */}
-      <View style={styles.petSelector}>
-        <Text style={styles.petName}>{currentPet?.name || 'Mochi'}</Text>
-        <Text style={styles.petDetails}>
-          {currentPet?.breed} • {currentPet?.age}y • {currentPet?.weight}kg
-        </Text>
-      </View>
+          {/* Center: Brand Name */}
+          <View style={styles.titleContainer}>
+            <Ionicons name="paw" size={20} color={Colors.primary.orange} />
+            <Text style={styles.title}>PAWSITIVE</Text>
+          </View>
 
-      {/* User Avatar */}
-      <TouchableOpacity style={styles.avatar}>
-        <Ionicons name="person-circle-outline" size={32} color={Colors.primary.brown} />
-      </TouchableOpacity>
+          {/* Right: Notifications */}
+          <TouchableOpacity style={styles.iconButton}>
+            <Ionicons name="notifications-outline" size={24} color={Colors.primary.brown} />
+            <View style={styles.badge} />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    height: 80,
-    backgroundColor: Colors.primary.orange,
+  safeArea: {
+    backgroundColor: Colors.neutral.background,
+    // Add a little extra padding for Android if needed
+    paddingTop: Platform.OS === 'android' ? 10 : 0, 
+  },
+  container: {
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.primary.brown,
+    letterSpacing: 1,
   },
   iconButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  petSelector: {
-    flex: 1,
-    marginLeft: 8,
-    paddingLeft: 8,
-  },
-  petName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.primary.brown,
-    marginBottom: 2,
-  },
-  petDetails: {
-    fontSize: 14,
-    color: Colors.primary.brown,
-    opacity: 0.8,
-  },
-  avatar: {
-    padding: 8,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+  badge: {
+    position: 'absolute',
+    top: 8,
+    right: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.primary.orange,
+    borderWidth: 1,
+    borderColor: '#fff',
   },
 });

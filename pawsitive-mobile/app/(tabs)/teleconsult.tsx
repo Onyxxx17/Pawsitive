@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
   PermissionsAndroid,
+  Alert,
 } from "react-native";
 import {
   ClientRoleType,
@@ -18,10 +19,12 @@ import {
   RtcConnection,
 } from "react-native-agora";
 
+// Use the App ID provided in your code
 const appId = "9929c39069d449f09ee336c44a087347";
 
 export default function Teleconsult() {
-  const agoraEngineRef = useRef<IRtcEngine>();
+  // Fix: Initialize ref as null to avoid TypeScript errors
+  const agoraEngineRef = useRef<IRtcEngine | null>(null);
   const [isJoined, setIsJoined] = useState(false);
   const [remoteUsers, setRemoteUsers] = useState<number[]>([]);
   const [message, setMessage] = useState("");
@@ -49,6 +52,7 @@ export default function Teleconsult() {
         onUserOffline: () => {},
       });
       agoraEngineRef.current?.release();
+      agoraEngineRef.current = null;
     };
   }, []);
 
@@ -69,23 +73,31 @@ export default function Teleconsult() {
         },
         onUserJoined: (_connection: RtcConnection, uid: number) => {
           setMessage("Remote user " + uid + " joined");
-          setRemoteUsers((prev) => [...prev, uid]);
+          setRemoteUsers((prev) => {
+             // Prevent duplicate users
+             if(prev.includes(uid)) return prev;
+             return [...prev, uid];
+          });
         },
         onUserOffline: (_connection: RtcConnection, uid: number) => {
           setMessage("Remote user " + uid + " left the channel");
           setRemoteUsers((prev) => prev.filter((id) => id !== uid));
         },
+        onError: (errorCode: number, msg: string) => {
+            console.log("Agora Error:", errorCode, msg);
+        }
       });
 
       // Initialize the engine
       agoraEngine.initialize({
         appId: appId,
+        channelProfile: ChannelProfileType.ChannelProfileCommunication,
       });
 
       // Enable video
       agoraEngine.enableVideo();
     } catch (e) {
-      console.log(e);
+      console.log("Error setting up video:", e);
     }
   };
 
@@ -104,7 +116,6 @@ export default function Teleconsult() {
 
       // Join channel
       agoraEngineRef.current?.joinChannel("", channelName, 0, {
-        channelProfile: ChannelProfileType.ChannelProfileCommunication,
         clientRoleType: ClientRoleType.ClientRoleBroadcaster,
         publishMicrophoneTrack: true,
         publishCameraTrack: true,
@@ -154,6 +165,7 @@ export default function Teleconsult() {
                       <RtcSurfaceView
                         canvas={{ uid }}
                         style={styles.remoteVideo}
+                        zOrderMediaOverlay={false}
                       />
                       <Text style={styles.videoLabel}>User {uid}</Text>
                     </View>
@@ -173,7 +185,11 @@ export default function Teleconsult() {
               {/* Local Video */}
               <View style={styles.localVideoContainer}>
                 <React.Fragment key={0}>
-                  <RtcSurfaceView canvas={{ uid: 0 }} style={styles.localVideo} />
+                  <RtcSurfaceView 
+                    canvas={{ uid: 0 }} 
+                    style={styles.localVideo} 
+                    zOrderMediaOverlay={true} 
+                  />
                 </React.Fragment>
                 <Text style={styles.localVideoLabel}>You</Text>
               </View>
@@ -249,6 +265,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    marginTop: 50,
   },
   input: {
     width: "100%",
