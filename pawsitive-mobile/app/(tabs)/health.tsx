@@ -75,7 +75,7 @@ export default function HealthScreen() {
 
           <TouchableOpacity 
             style={styles.bookBtn} 
-            onPress={() => Alert.alert("Coming Soon")}
+            onPress={() => router.push('/teleconsult')}
           >
             <Text style={styles.bookBtnText}>Book Consultation</Text>
           </TouchableOpacity>

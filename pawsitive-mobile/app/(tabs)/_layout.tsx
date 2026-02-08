@@ -50,13 +50,13 @@ export default function TabLayout() {
       />
 
       {/* --- ADDED FROM TEAMMATE (Video Call) --- */}
-      <Tabs.Screen 
+      {/* <Tabs.Screen 
         name="teleconsult" 
         options={{ 
           title: 'Video', 
           tabBarIcon: ({ focused }) => <Ionicons name={focused ? "videocam" : "videocam-outline"} size={26} color={Colors.primary.brown} /> 
         }} 
-      />
+      /> */}
 
       <Tabs.Screen 
         name="care" 

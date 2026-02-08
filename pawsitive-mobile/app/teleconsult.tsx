@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   View,
   PermissionsAndroid,
-  Alert,
 } from "react-native";
 import {
   ClientRoleType,
@@ -18,6 +17,7 @@ import {
   ChannelProfileType,
   RtcConnection,
 } from "react-native-agora";
+import { MaterialIcons } from '@expo/vector-icons';
 
 // Use the App ID provided in your code
 const appId = "9929c39069d449f09ee336c44a087347";
@@ -195,9 +195,11 @@ export default function Teleconsult() {
               </View>
             </View>
 
-            <TouchableOpacity style={styles.leaveButton} onPress={leave}>
-              <Text style={styles.buttonText}>Leave Channel</Text>
-            </TouchableOpacity>
+            <View style={styles.footerContainer}>
+              <TouchableOpacity style={styles.leaveButton} onPress={leave}>
+                <MaterialIcons name="call-end" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
           </>
         ) : (
           <View style={styles.joinContainer}>
@@ -360,8 +362,19 @@ const styles = StyleSheet.create({
   leaveButton: {
     backgroundColor: "#FF3B30",
     padding: 18,
-    borderRadius: 10,
-    alignItems: "center",
+    borderRadius: 100,
+    alignItems: "center", // Center horizontally
+    justifyContent: "center", // Center vertically
     marginTop: 20,
+  },
+  footerContainer: {
+    position: "absolute",
+    bottom: 100, // Adjusted to account for TabBar height
+    left: 0,
+    right: 0,
+    // backgroundColor: "#fff",
+    padding: 10,
+    flexDirection: "row",
+    justifyContent: "space-around",
   },
 });
