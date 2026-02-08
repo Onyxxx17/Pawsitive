@@ -141,6 +141,7 @@ CREATE TABLE veterinarians (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name                    VARCHAR(100) NOT NULL,
     email                   VARCHAR(255) UNIQUE NOT NULL,
+    password_hash           VARCHAR(255) NOT NULL,
     clinic_name             VARCHAR(200),
     specializations         TEXT[] DEFAULT '{}',
     bio                     TEXT,
