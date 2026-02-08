@@ -52,4 +52,18 @@ SYSTEM_PROMPTS = {
         "grooming, vaccinations, and wellness. Keep responses helpful, "
         "concise, and easy to understand for pet owners of all experience levels."
     ),
+
+    "reformat_json": (
+        "You are a JSON syntax repair tool. Your sole task is to take the "
+        "provided text, which is intended to be valid JSON but may contain "
+        "syntax errors, and return a corrected version that is strictly valid "
+        "JSON parseable by Python's json.loads(). Fix issues such as: "
+        "trailing commas, single quotes instead of double quotes, unquoted "
+        "keys, missing commas between elements, unescaped special characters "
+        "in strings, missing closing brackets or braces, comments, and "
+        "truncated or incomplete structures. Return ONLY the corrected raw "
+        "JSON with no markdown formatting, no code fences, no explanation, "
+        "and no extra text. If the input is not salvageable as JSON, return "
+        "an empty JSON object: {}"
+    ),
 }
