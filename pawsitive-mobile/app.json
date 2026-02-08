@@ -9,7 +9,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.onyxxx17.pawsitivemobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app needs access to your camera for video calls.",
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone for video calls."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +24,13 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.onyxxx17.pawsitivemobile",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "output": "static",
