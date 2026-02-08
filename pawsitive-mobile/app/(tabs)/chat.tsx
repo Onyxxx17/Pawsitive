@@ -1,98 +1,163 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Card from '@/components/ui/Card';
 import { Colors } from '@/constants/Colors';
+import { useNavigation, useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-const messages = [
-  { id: 1, text: "Hi! I'm your pet health assistant. How can I help Mochi today?", sender: 'bot' },
+const initialMessages = [
+  { id: '1', text: "Woof! I'm PawPal 🐾\nAsk me anything about Mochi's health!", sender: 'bot' },
 ];
 
 export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
-  const [chatMessages, setChatMessages] = useState(messages);
-  const flatListRef = useRef(null);
+  const [messages, setMessages] = useState(initialMessages);
+  const navigation = useNavigation();
+  const router = useRouter();
+
+  useEffect(() => {
+    navigation.setOptions({ 
+      headerShown: false,
+      tabBarStyle: { display: 'none' } 
+    });
+
+    return () => {
+      navigation.setOptions({
+        headerShown: true,
+        tabBarStyle: {
+          backgroundColor: Colors.primary.orange,
+          position: 'absolute',
+          bottom: 25, left: 20, right: 20, height: 65, borderRadius: 35, borderTopWidth: 0,
+          shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, elevation: 5,
+        }
+      });
+    };
+  }, [navigation]);
 
   const sendMessage = () => {
     if (inputText.trim()) {
-      const userMsg = { id: Date.now(), text: inputText, sender: 'user' };
-      setChatMessages(prev => [...prev, userMsg]);
+      const userMsg = { id: Date.now().toString(), text: inputText, sender: 'user' };
+      setMessages(prev => [...prev, userMsg]);
       setInputText('');
-      
-      // Simulate bot response
       setTimeout(() => {
-        const botResponses = [
-          "Mochi's health score looks great! Keep up the good work 🐶",
-          "Try adding more playtime for better mental health benefits.",
-          "Perfect feeding schedule! Consistency is key.",
-        ];
-        const botMsg = { 
-          id: Date.now() + 1, 
-          text: botResponses[Math.floor(Math.random() * botResponses.length)], 
-          sender: 'bot' 
-        };
-        setChatMessages(prev => [...prev, botMsg]);
+        const botMsg = { id: (Date.now()+1).toString(), text: "That's good to hear! 🐶", sender: 'bot' };
+        setMessages(prev => [...prev, botMsg]);
       }, 1000);
     }
   };
 
+  const handleBack = () => {
+    router.push('/'); 
+  };
+
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
-      <Text style={styles.title}>AI Health Assistant</Text>
-      <Card style={styles.chatContainer}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      
+      <View style={styles.customHeader}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={Colors.primary.brown} />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>PawPal AI</Text>
+          <View style={styles.onlineBadge} />
+        </View>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <KeyboardAvoidingView 
+        style={styles.keyboardContainer} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+      >
         <FlatList
-          ref={flatListRef}
-          data={chatMessages}
+          data={messages}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.list}
           renderItem={({ item }) => (
-            <View style={[styles.messageContainer, item.sender === 'user' ? styles.userMessage : styles.botMessage]}>
-              <Text style={[styles.messageText, item.sender === 'user' ? styles.userText : styles.botText]}>
+            <View style={[styles.msgBox, item.sender === 'user' ? styles.userMsg : styles.botMsg]}>
+              <Text style={[styles.msgText, item.sender === 'user' ? styles.userText : styles.botText]}>
                 {item.text}
               </Text>
             </View>
           )}
-          contentContainerStyle={styles.messages}
-          showsVerticalScrollIndicator={false}
         />
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Ask about Mochi's health..."
-            placeholderTextColor={Colors.neutral.textLight}
+        
+        <View style={styles.inputArea}>
+          <TextInput 
+            style={styles.input} 
+            value={inputText} 
+            onChangeText={setInputText} 
+            placeholder="Ask PawPal..." 
+            placeholderTextColor="#999"
+            multiline
           />
-          <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
-            <Ionicons name="send" size={20} color="white" />
+          <TouchableOpacity style={styles.sendBtn} onPress={sendMessage}>
+            <Ionicons name="arrow-up" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
-      </Card>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.neutral.background },
-  title: { fontSize: 28, fontWeight: '800', color: Colors.primary.brown, marginBottom: 20, paddingHorizontal: 20, paddingTop: 12 },
-  chatContainer: { flex: 1, marginHorizontal: 20, padding: 20 },
-  messages: { flexGrow: 1, paddingBottom: 20 },
-  messageContainer: { marginBottom: 16, maxWidth: '80%' },
-  userMessage: { alignSelf: 'flex-end' },
-  botMessage: { alignSelf: 'flex-start' },
-  messageText: { fontSize: 16, lineHeight: 22, padding: 12, borderRadius: 20 },
-  userText: { backgroundColor: Colors.primary.orange, color: Colors.primary.brown },
-  botText: { backgroundColor: Colors.neutral.card, color: Colors.primary.brown },
-  inputContainer: { 
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderTopWidth: 1, borderTopColor: Colors.neutral.border, paddingTop: 16
+  
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: Colors.neutral.background,
+  },
+  backButton: {
+    width: 40, height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2
+  },
+  headerTitleContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: Colors.primary.brown },
+  onlineBadge: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.health.excellent },
+
+  keyboardContainer: { flex: 1 },
+  list: { padding: 20, paddingBottom: 20 },
+  
+  msgBox: { marginBottom: 12, maxWidth: '80%' },
+  userMsg: { alignSelf: 'flex-end' },
+  botMsg: { alignSelf: 'flex-start' },
+  
+  msgText: { fontSize: 16, padding: 14, borderRadius: 20, overflow: 'hidden' },
+  userText: { backgroundColor: Colors.primary.brown, color: Colors.primary.orange },
+  botText: { backgroundColor: '#fff', color: Colors.primary.brown },
+  
+  inputArea: { 
+    flexDirection: 'row', 
+    padding: 16, 
+    paddingBottom: Platform.OS === 'ios' ? 16 : 16,
+    backgroundColor: '#fff', 
+    gap: 10, 
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
   input: { 
-    flex: 1, padding: 14, borderRadius: 20, 
-    backgroundColor: Colors.neutral.card, 
-    fontSize: 16, color: Colors.primary.brown 
+    flex: 1, 
+    backgroundColor: Colors.neutral.background, 
+    padding: 12, 
+    paddingTop: 12,
+    borderRadius: 24, 
+    fontSize: 16,
+    maxHeight: 100, 
   },
-  sendButton: { 
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: Colors.primary.orange, justifyContent: 'center', alignItems: 'center'
+  sendBtn: { 
+    width: 48, height: 48, 
+    backgroundColor: Colors.primary.orange, 
+    borderRadius: 24, 
+    justifyContent: 'center', alignItems: 'center' 
   },
 });
