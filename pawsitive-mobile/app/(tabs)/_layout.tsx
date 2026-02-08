@@ -31,6 +31,7 @@ export default function TabLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "home" : "home-outline"} size={26} color={Colors.primary.brown} /> }} />
       <Tabs.Screen name="checks" options={{ title: 'Daily', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "checkmark-circle" : "checkmark-circle-outline"} size={26} color={Colors.primary.brown} /> }} />
+      <Tabs.Screen name="teleconsult" options={{ title: 'Video', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "videocam" : "videocam-outline"} size={26} color={Colors.primary.brown} /> }} />
       <Tabs.Screen name="care" options={{ title: 'Care', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "heart" : "heart-outline"} size={26} color={Colors.primary.brown} /> }} />
       <Tabs.Screen name="health" options={{ title: 'Health', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "medkit" : "medkit-outline"} size={26} color={Colors.primary.brown} /> }} />
       <Tabs.Screen name="chat" options={{ title: 'Chat', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "chatbubble" : "chatbubble-outline"} size={26} color={Colors.primary.brown} /> }} />
