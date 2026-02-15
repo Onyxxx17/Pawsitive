@@ -1,13 +1,13 @@
-import { Stack } from 'expo-router';
-import { Colors } from '@/constants/Colors';
+import { Stack } from "expo-router";
+import { PetProvider } from "./context/PetContext"; // Import the provider
 
 export default function RootLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: Colors.neutral.background },
-      }}
-    />
+    // 🐾 Wrap everything in PetProvider
+    <PetProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+    </PetProvider>
   );
 }
