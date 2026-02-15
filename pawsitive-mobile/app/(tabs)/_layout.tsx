@@ -1,10 +1,10 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Platform, Modal, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
-import { usePet } from '../context/PetContext'; // 👈 Import Context
+import { usePet } from '../../context/PetContext';
 
 // 🎨 Custom Header with Functional Dropdown
 const CustomHeader = () => {
