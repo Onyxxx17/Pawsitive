@@ -38,7 +38,7 @@ const LockedField = ({ label, value }: { label: string; value: string }) => (
         <Text style={styles.lockText}>Locked</Text>
       </View>
     </View>
-    <Text style={styles.lockedHint}>Change your email through Supabase account settings.</Text>
+    <Text style={styles.lockedHint}>Change your email through the account settings.</Text>
   </View>
 );
 

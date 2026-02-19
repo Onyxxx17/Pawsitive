@@ -1,4 +1,5 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 // 🐾 Define Pet Type
 export type Pet = {
@@ -10,17 +11,73 @@ export type Pet = {
   avatar: string;
 };
 
-// 🐾 Default Data (Placeholder until they sign up)
-const DEFAULT_PETS: Pet[] = [
-  { id: '1', name: 'Buddy', type: 'Dog', avatar: 'https://img.freepik.com/free-photo/isolated-happy-smiling-dog-white-background-portrait-4_1562-693.jpg' },
-  { id: '2', name: 'Luna', type: 'Cat', avatar: 'https://img.freepik.com/free-photo/close-up-adorable-cat-looking-camera_23-2149167387.jpg' },
-];
+// 🐾 Default placeholder (fallback when no pets exist)
+const DEFAULT_PET: Pet = {
+  id: 'default',
+  name: 'Add a Pet',
+  type: 'Dog',
+  avatar: 'https://img.freepik.com/free-photo/isolated-happy-smiling-dog-white-background-portrait-4_1562-693.jpg'
+};
 
 const PetContext = createContext<any>(null);
 
 export const PetProvider = ({ children }: any) => {
-  const [pets, setPets] = useState<Pet[]>(DEFAULT_PETS);
-  const [activePet, setActivePet] = useState<Pet>(DEFAULT_PETS[0]);
+  const [pets, setPets] = useState<Pet[]>([]);
+  const [activePet, setActivePet] = useState<Pet>(DEFAULT_PET);
+  const [loading, setLoading] = useState(true);
+
+  // 🔄 Fetch pets from Supabase on mount
+  useEffect(() => {
+    fetchPets();
+  }, []);
+
+  const fetchPets = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('pets')
+        .select('*')
+        .eq('owner_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching pets:', error);
+        setLoading(false);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        // Convert database pets to Pet type
+        const formattedPets: Pet[] = data.map(pet => ({
+          id: pet.id,
+          name: pet.name,
+          type: pet.species === 'dog' ? 'Dog' : pet.species === 'cat' ? 'Cat' : 'Other',
+          breed: pet.breed || undefined,
+          weight: pet.weight_kg ? `${pet.weight_kg}kg` : undefined,
+          avatar: pet.profile_photo_url || (pet.species === 'cat' 
+            ? 'https://img.freepik.com/free-photo/close-up-adorable-cat-looking-camera_23-2149167387.jpg'
+            : 'https://img.freepik.com/free-photo/isolated-happy-smiling-dog-white-background-portrait-4_1562-693.jpg')
+        }));
+
+        setPets(formattedPets);
+        setActivePet(formattedPets[0]); // Set first pet as active
+      } else {
+        // No pets found, use default
+        setPets([]);
+        setActivePet(DEFAULT_PET);
+      }
+
+      setLoading(false);
+    } catch (error) {
+      console.error('Error in fetchPets:', error);
+      setLoading(false);
+    }
+  };
 
   // 📝 Function to Register a New Pet (Sign Up)
   const addPet = (name: string, type: any) => {
@@ -39,7 +96,7 @@ export const PetProvider = ({ children }: any) => {
   };
 
   return (
-    <PetContext.Provider value={{ activePet, setActivePet, pets, addPet }}>
+    <PetContext.Provider value={{ activePet, setActivePet, pets, addPet, fetchPets, loading }}>
       {children}
     </PetContext.Provider>
   );

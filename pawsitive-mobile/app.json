@@ -12,8 +12,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.onyxxx17.pawsitivemobile",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app needs access to your camera for video calls.",
-        "NSMicrophoneUsageDescription": "This app needs access to your microphone for video calls."
+        "NSCameraUsageDescription": "This app needs access to your camera to take photos of your pets.",
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select pet photos."
       }
     },
     "android": {
@@ -50,9 +51,12 @@
           }
         }
       ],
-      "@stream-io/video-react-native-sdk",
-      "@config-plugins/react-native-webrtc",
-      "expo-build-properties"
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera for pet photos."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
