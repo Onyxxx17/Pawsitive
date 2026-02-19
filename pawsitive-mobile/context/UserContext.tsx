@@ -122,7 +122,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
       if (uploadError) return { url: null, error: uploadError.message };
 
       const { data } = supabase.storage.from('images').getPublicUrl(path);
-      const publicUrl = data.publicUrl; // plain URL, no cache-buster
+      const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
 
       // Persist to profile row
       await updateProfile({ avatar_url: publicUrl });
