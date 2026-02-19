@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { PetProvider } from "../context/PetContext";
 import { UserProvider } from "../context/UserContext";
 import { StatusBar } from "expo-status-bar";
+import React from "react";
 
 export default function RootLayout() {
   return (
