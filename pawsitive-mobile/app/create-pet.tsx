@@ -64,11 +64,11 @@ export default function CreatePetScreen() {
       const response = await fetch(photoUri);
       const blob = await response.blob();
       const ext = photoUri.split('.').pop() ?? 'jpg';
-      const fileName = `${userId}/${Date.now()}.${ext}`;
+      const filePath = `pet_profiles/${userId}/${Date.now()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('pet-photos')
-        .upload(fileName, blob, { 
+        .from('images')
+        .upload(filePath, blob, { 
           contentType: `image/${ext}`,
           upsert: false 
         });
@@ -78,7 +78,7 @@ export default function CreatePetScreen() {
         return null;
       }
 
-      const { data } = supabase.storage.from('pet-photos').getPublicUrl(fileName);
+      const { data } = supabase.storage.from('images').getPublicUrl(filePath);
       return data.publicUrl;
     } catch (error) {
       console.error('Photo upload failed:', error);
