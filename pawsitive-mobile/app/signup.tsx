@@ -1,21 +1,47 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-import { usePet } from '../context/PetContext';
+import { supabase } from '@/lib/supabase';
 
 export default function SignUpScreen() {
   const router = useRouter();
-  const { addPet } = usePet();
-  const [petName, setPetName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [ownerName, setOwnerName] = useState('');
-  const [petType, setPetType] = useState('Dog');
+  const [loading, setLoading] = useState(false);
 
-  const handleSignUp = () => {
-    if (!petName || !ownerName) { Alert.alert("Missing Info", "Please fill in all fields."); return; }
-    addPet(petName, petType);
-    router.replace('/(tabs)');
+  const handleSignUp = async () => {
+    if (!email || !password || !ownerName) {
+      Alert.alert("Missing Info", "Please fill in all fields.");
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert("Weak Password", "Password must be at least 6 characters.");
+      return;
+    }
+
+    setLoading(true);
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        data: {
+          full_name: ownerName,
+        }
+      }
+    });
+    setLoading(false);
+
+    if (error) {
+      Alert.alert("Sign Up Failed", error.message);
+    } else if (data.user) {
+      Alert.alert("Success!", "Account created! Please log in.", [
+        { text: "OK", onPress: () => router.replace('/login') }
+      ]);
+    }
   };
 
   return (
@@ -26,29 +52,54 @@ export default function SignUpScreen() {
 
       <View style={styles.header}>
         <Text style={styles.welcome}>Join Pawsitive</Text>
-        <Text style={styles.sub}>Create a profile for your best friend.</Text>
+        <Text style={styles.sub}>Create your account to get started.</Text>
       </View>
 
       <View style={styles.form}>
         <View style={styles.inputContainer}>
           <Ionicons name="person-outline" size={20} color={Colors.neutral.textLight} style={styles.icon} />
-          <TextInput style={styles.input} placeholder="Your Name" placeholderTextColor="#aaa" value={ownerName} onChangeText={setOwnerName} />
+          <TextInput 
+            style={styles.input} 
+            placeholder="Your Name" 
+            placeholderTextColor="#aaa" 
+            value={ownerName} 
+            onChangeText={setOwnerName} 
+          />
         </View>
         <View style={styles.inputContainer}>
-          <Ionicons name="paw-outline" size={20} color={Colors.neutral.textLight} style={styles.icon} />
-          <TextInput style={styles.input} placeholder="Pet's Name" placeholderTextColor="#aaa" value={petName} onChangeText={setPetName} />
+          <Ionicons name="mail-outline" size={20} color={Colors.neutral.textLight} style={styles.icon} />
+          <TextInput 
+            style={styles.input} 
+            placeholder="Email" 
+            placeholderTextColor="#aaa" 
+            value={email} 
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
         </View>
-        
-        <View style={styles.typeRow}>
-          {['Dog', 'Cat'].map((type) => (
-            <TouchableOpacity key={type} style={[styles.typeBtn, petType === type && styles.typeBtnActive]} onPress={() => setPetType(type)}>
-              <Text style={[styles.typeText, petType === type && styles.typeTextActive]}>{type}</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.inputContainer}>
+          <Ionicons name="lock-closed-outline" size={20} color={Colors.neutral.textLight} style={styles.icon} />
+          <TextInput 
+            style={styles.input} 
+            placeholder="Password (min 6 chars)" 
+            placeholderTextColor="#aaa" 
+            value={password} 
+            onChangeText={setPassword}
+            secureTextEntry
+          />
         </View>
 
-        <TouchableOpacity style={styles.signupBtn} onPress={handleSignUp}>
-          <Text style={styles.signupText}>Get Started</Text>
+        <TouchableOpacity 
+          style={[styles.signupBtn, loading && styles.signupBtnDisabled]} 
+          onPress={handleSignUp}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.signupText}>Get Started</Text>
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -71,5 +122,6 @@ const styles = StyleSheet.create({
   typeText: { fontWeight: '600', color: Colors.neutral.textLight },
   typeTextActive: { color: Colors.primary.orangeDark, fontWeight: 'bold' },
   signupBtn: { backgroundColor: Colors.primary.orangeDark, height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 5 },
+  signupBtnDisabled: { opacity: 0.6 },
   signupText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
 });
