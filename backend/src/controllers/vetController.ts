@@ -2,17 +2,22 @@ import { Request, Response } from "express";
 import pool from "../config/database";
 
 // ─── GET MY VET PROFILE ─────────────────────────────────────
+// We look up the vet by email from the Supabase JWT — the
+// veterinarians table has its own UUID primary key.
 
 export async function getMyVetProfile(req: Request, res: Response): Promise<void> {
   try {
-    const vetId = req.user?.id;
+    const email = req.user?.email;
+    // authorizeVet middleware already validated; (req as any).vetId is available
+    const vetId = (req as any).vetId;
 
     const result = await pool.query(
       `SELECT id, email, name, clinic_name, specializations, bio,
               profile_photo_url, license_number, years_experience,
               consultation_fee, rating, total_reviews, languages,
               created_at, updated_at
-       FROM veterinarians WHERE id = $1 AND is_active = TRUE`,
+       FROM veterinarians
+       WHERE id = $1 AND is_active = TRUE`,
       [vetId]
     );
 
@@ -29,10 +34,11 @@ export async function getMyVetProfile(req: Request, res: Response): Promise<void
 }
 
 // ─── UPDATE MY VET PROFILE ──────────────────────────────────
+// Email is locked, matched from Supabase JWT.
 
 export async function updateMyVetProfile(req: Request, res: Response): Promise<void> {
   try {
-    const vetId = req.user?.id;
+    const vetId = (req as any).vetId;
     const {
       name,
       clinic_name,
@@ -55,23 +61,16 @@ export async function updateMyVetProfile(req: Request, res: Response): Promise<v
            license_number      = COALESCE($6, license_number),
            years_experience    = COALESCE($7, years_experience),
            consultation_fee    = COALESCE($8, consultation_fee),
-           languages           = COALESCE($9, languages)
+           languages           = COALESCE($9, languages),
+           updated_at          = NOW()
        WHERE id = $10 AND is_active = TRUE
        RETURNING id, email, name, clinic_name, specializations, bio,
                  profile_photo_url, license_number, years_experience,
                  consultation_fee, rating, total_reviews, languages,
                  created_at, updated_at`,
       [
-        name,
-        clinic_name,
-        specializations,
-        bio,
-        profile_photo_url,
-        license_number,
-        years_experience,
-        consultation_fee,
-        languages,
-        vetId,
+        name, clinic_name, specializations, bio, profile_photo_url,
+        license_number, years_experience, consultation_fee, languages, vetId,
       ]
     );
 
@@ -173,7 +172,7 @@ export async function listVets(req: Request, res: Response): Promise<void> {
 
 export async function deactivateVetAccount(req: Request, res: Response): Promise<void> {
   try {
-    const vetId = req.user?.id;
+    const vetId = (req as any).vetId; // set by authorizeVet middleware
 
     await pool.query("UPDATE veterinarians SET is_active = FALSE WHERE id = $1", [vetId]);
 

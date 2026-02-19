@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize } from "../middleware/auth";
+import { authenticate, authorizeVet } from "../middleware/auth";
 import {
   getMyVetProfile,
   updateMyVetProfile,
@@ -11,9 +11,9 @@ import {
 const router = Router();
 
 // ─── Protected routes (vet only) — must be above /:id ───────
-router.get("/me/profile", authenticate, authorize("vet"), getMyVetProfile);
-router.put("/me/profile", authenticate, authorize("vet"), updateMyVetProfile);
-router.delete("/me/profile", authenticate, authorize("vet"), deactivateVetAccount);
+router.get("/me/profile", authenticate, authorizeVet, getMyVetProfile);
+router.put("/me/profile", authenticate, authorizeVet, updateMyVetProfile);
+router.delete("/me/profile", authenticate, authorizeVet, deactivateVetAccount);
 
 // ─── Public routes (any authenticated user can browse vets) ──
 router.get("/", authenticate, listVets);

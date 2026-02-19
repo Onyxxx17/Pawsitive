@@ -6,7 +6,6 @@ import path from "path";
 // Load .env from project root (Pawsitive/)
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-import authRoutes from "./routes/auth";
 import userRoutes from "./routes/user";
 import vetRoutes from "./routes/vet";
 
@@ -23,7 +22,7 @@ app.get("/health", (_req, res) => {
 });
 
 // ─── Routes ─────────────────────────────────────────────────
-app.use("/api/auth", authRoutes);
+// Auth is handled client-side by Supabase — no /api/auth routes needed
 app.use("/api/users", userRoutes);
 app.use("/api/vets", vetRoutes);
 

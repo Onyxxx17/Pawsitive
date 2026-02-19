@@ -116,7 +116,7 @@ const CustomHeader = () => {
             <View style={styles.menuItems}>
               <TouchableOpacity style={styles.menuItem} onPress={() => {
                 setSidebarOpen(false);
-                // Add your profile navigation here
+                router.push('/profile');
               }}>
                 <Ionicons name="person-outline" size={24} color={Colors.primary.brown} />
                 <Text style={styles.menuText}>Profile</Text>
@@ -211,6 +211,10 @@ export default function TabLayout() {
           title: 'PawPal',
           tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} size={28} color={color} />,
         }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{ href: null }} // hidden from tab bar; accessible via hamburger menu
       />
     </Tabs>
   );
