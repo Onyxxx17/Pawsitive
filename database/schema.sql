@@ -1,9 +1,5 @@
 -- ============================================================
--- PAWSITIVE - Database Schema
--- PostgreSQL (Supabase)
--- ============================================================
--- Run this file in order. Tables are created with proper
--- foreign key dependencies (parents before children).
+-- PAWSITIVE - Database Schema (Supabase Compatible)
 -- ============================================================
 
 -- Enable UUID generation
@@ -26,14 +22,12 @@ CREATE TYPE appointment_status AS ENUM ('scheduled', 'in_progress', 'completed',
 CREATE TYPE call_type AS ENUM ('video', 'voice');
 
 -- ============================================================
--- 1. USERS
+-- 1. PROFILES (links to auth.users)
 -- ============================================================
 
-CREATE TABLE users (
-    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email                       VARCHAR(255) UNIQUE NOT NULL,
-    password_hash               VARCHAR(255) NOT NULL,
-    name                        VARCHAR(100) NOT NULL,
+CREATE TABLE profiles (
+    id                          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    name                        VARCHAR(100),
     avatar_url                  TEXT,
     phone_number                VARCHAR(20),
     notification_preferences    JSONB DEFAULT '{}'::jsonb,
@@ -49,7 +43,7 @@ CREATE TABLE users (
 
 CREATE TABLE pets (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    owner_id                UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    owner_id                UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     name                    VARCHAR(100) NOT NULL,
     species                 species_type NOT NULL,
     breed                   VARCHAR(100),
@@ -122,7 +116,7 @@ CREATE TABLE recommendations (
 
 CREATE TABLE reminders (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id                 UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     pet_id                  UUID NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
     title                   VARCHAR(200) NOT NULL,
     type                    reminder_type NOT NULL,
@@ -179,7 +173,7 @@ CREATE TABLE vet_availability (
 
 CREATE TABLE appointments (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id                 UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     pet_id                  UUID NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
     vet_id                  UUID NOT NULL REFERENCES veterinarians(id) ON DELETE CASCADE,
     scheduled_at            TIMESTAMP NOT NULL,
@@ -216,31 +210,21 @@ CREATE TABLE consultation_notes (
 -- INDEXES
 -- ============================================================
 
--- User lookups
-CREATE INDEX idx_users_email ON users(email);
-
--- Pet lookups by owner
 CREATE INDEX idx_pets_owner_id ON pets(owner_id);
 
--- Health check queries
 CREATE INDEX idx_health_checks_pet_id ON health_checks(pet_id);
 CREATE INDEX idx_health_checks_pet_type ON health_checks(pet_id, check_type);
 CREATE INDEX idx_health_checks_created ON health_checks(pet_id, created_at DESC);
 
--- Health log queries
 CREATE INDEX idx_health_logs_pet_id ON health_logs(pet_id);
-CREATE INDEX idx_health_logs_pet_type ON health_logs(pet_id, log_type);
 CREATE INDEX idx_health_logs_logged_at ON health_logs(pet_id, logged_at DESC);
 
--- Recommendation queries
 CREATE INDEX idx_recommendations_pet_id ON recommendations(pet_id);
 CREATE INDEX idx_recommendations_unread ON recommendations(pet_id, is_read) WHERE is_read = FALSE;
 
--- Reminder scheduling
 CREATE INDEX idx_reminders_next_trigger ON reminders(next_trigger_at) WHERE is_active = TRUE;
 CREATE INDEX idx_reminders_user_id ON reminders(user_id);
 
--- TeleVet queries
 CREATE INDEX idx_vet_availability_vet_id ON vet_availability(vet_id);
 CREATE INDEX idx_appointments_user_id ON appointments(user_id);
 CREATE INDEX idx_appointments_vet_id ON appointments(vet_id);
@@ -248,7 +232,7 @@ CREATE INDEX idx_appointments_scheduled ON appointments(scheduled_at, status);
 CREATE INDEX idx_consultation_notes_appointment ON consultation_notes(appointment_id);
 
 -- ============================================================
--- TRIGGER: auto-update updated_at on row modification
+-- TRIGGER: auto-update updated_at on modification
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -259,8 +243,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_users_updated_at
-    BEFORE UPDATE ON users
+CREATE TRIGGER trg_profiles_updated_at
+    BEFORE UPDATE ON profiles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER trg_pets_updated_at
