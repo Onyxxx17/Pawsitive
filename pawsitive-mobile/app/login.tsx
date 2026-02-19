@@ -1,16 +1,34 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    if (!email) { Alert.alert("Error", "Please enter an email"); return; }
-    router.replace('/(tabs)');
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter both email and password");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    setLoading(false);
+
+    if (error) {
+      Alert.alert("Login Failed", error.message);
+    } else {
+      router.replace('/(tabs)');
+    }
   };
 
   return (
@@ -34,10 +52,25 @@ export default function LoginScreen() {
         </View>
         <View style={styles.inputContainer}>
           <Ionicons name="lock-closed-outline" size={20} color={Colors.neutral.textLight} style={styles.icon} />
-          <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#aaa" secureTextEntry />
+          <TextInput 
+            style={styles.input} 
+            placeholder="Password" 
+            placeholderTextColor="#aaa" 
+            secureTextEntry 
+            value={password}
+            onChangeText={setPassword}
+          />
         </View>
-        <TouchableOpacity style={styles.loginBtn} onPress={handleLogin}>
-          <Text style={styles.loginText}>Log In</Text>
+        <TouchableOpacity 
+          style={[styles.loginBtn, loading && styles.loginBtnDisabled]} 
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.loginText}>Log In</Text>
+          )}
         </TouchableOpacity>
       </View>
       
@@ -64,6 +97,7 @@ const styles = StyleSheet.create({
   icon: { marginRight: 12 },
   input: { flex: 1, height: '100%', fontSize: 16 },
   loginBtn: { backgroundColor: Colors.primary.brown, height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 5 },
+  loginBtnDisabled: { opacity: 0.6 },
   loginText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 40 },
   footerText: { color: Colors.neutral.textLight },
