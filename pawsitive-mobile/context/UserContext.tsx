@@ -53,25 +53,11 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
 
   // ── Fetch profile from `profiles` table ─────────────────────────────────────
   const fetchProfile = useCallback(async (sess: Session) => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('profiles')
       .select('id, name, avatar_url, phone_number, notification_preferences, timezone, created_at, updated_at')
       .eq('id', sess.user.id)
       .single();
-
-    if (error && error.code === 'PGRST116') {
-      // Row doesn't exist yet — insert a blank one (Supabase trigger may not be set)
-      const { data: inserted } = await supabase
-        .from('profiles')
-        .insert({ id: sess.user.id })
-        .select()
-        .single();
-
-      if (inserted) {
-        setProfile({ ...inserted, email: sess.user.email ?? '' });
-      }
-      return;
-    }
 
     if (data) {
       setProfile({ ...data, email: sess.user.email ?? '' });
@@ -106,7 +92,8 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
 
     const { data, error } = await supabase
       .from('profiles')
-      .upsert({ id: session.user.id, ...updates, updated_at: new Date().toISOString() })
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', session.user.id)
       .select()
       .single();
 
@@ -124,16 +111,16 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
       const response = await fetch(localUri);
       const blob = await response.blob();
       const ext = localUri.split('.').pop() ?? 'jpg';
-      const path = `${session.user.id}/avatar.${ext}`;
+      const path = `user_profiles/${session.user.id}/avatar.${ext}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('avatars')
+        .from('images')
         .upload(path, blob, { upsert: true, contentType: `image/${ext}` });
 
       if (uploadError) return { url: null, error: uploadError.message };
 
-      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-      const publicUrl = `${data.publicUrl}?t=${Date.now()}`; // cache-bust
+      const { data } = supabase.storage.from('images').getPublicUrl(path);
+      const publicUrl = data.publicUrl; // plain URL, no cache-buster
 
       // Persist to profile row
       await updateProfile({ avatar_url: publicUrl });
