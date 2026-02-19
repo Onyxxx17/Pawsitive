@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Platform } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
@@ -10,6 +10,7 @@ import { usePet } from '../../context/PetContext';
 const CustomHeader = () => {
   const { activePet, setActivePet, pets } = usePet();
   const [expanded, setExpanded] = React.useState(false);
+  const router = useRouter();
 
   const handleSelect = (pet: any) => {
     setActivePet(pet);
@@ -19,7 +20,7 @@ const CustomHeader = () => {
   return (
     <SafeAreaView edges={['top']} style={styles.headerContainer}>
       <View style={styles.headerContent}>
-        <TouchableOpacity style={styles.iconButton}>
+        <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/profile')}>
           <Ionicons name="menu" size={26} color={Colors.primary.brown} />
         </TouchableOpacity>
 
@@ -125,6 +126,10 @@ export default function TabLayout() {
           title: 'PawPal',
           tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} size={28} color={color} />,
         }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{ href: null }} // hidden from tab bar; accessible via hamburger menu
       />
     </Tabs>
   );
