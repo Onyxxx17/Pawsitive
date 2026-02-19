@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize } from "../middleware/auth";
+import { authenticate } from "../middleware/auth";
 import {
   getMyProfile,
   updateMyProfile,
@@ -8,9 +8,8 @@ import {
 
 const router = Router();
 
-// All routes require authentication as a "user"
+// All routes require a valid Supabase JWT
 router.use(authenticate);
-router.use(authorize("user"));
 
 router.get("/me", getMyProfile);
 router.put("/me", updateMyProfile);
