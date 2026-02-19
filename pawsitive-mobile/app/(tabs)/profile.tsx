@@ -106,10 +106,11 @@ export default function ProfileScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
+      base64: false,
     });
 
     if (result.canceled) return;
@@ -125,6 +126,7 @@ export default function ProfileScreen() {
       Alert.alert('Upload failed', error);
       setAvatarUri(profile?.avatar_url ?? null); // revert
     } else if (url) {
+      // Strip cache-buster from display URI to avoid broken URLs
       setAvatarUri(url);
     }
   };
