@@ -212,7 +212,7 @@ export default function CreatePetScreen() {
                 onPress={() => setSpecies(type)}
               >
                 <Ionicons 
-                  name={type === 'dog' ? 'paw' : 'fish'} 
+                  name={type === 'dog' ? 'paw' : 'heart'} 
                   size={22} 
                   color={species === type ? Colors.primary.orangeDark : Colors.neutral.textLight} 
                 />

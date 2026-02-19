@@ -42,8 +42,14 @@ export default function EditPetScreen() {
   }, [id]);
 
   const fetchPetData = async () => {
-    if (!id) return;
+    if (!id) {
+      console.log('No pet ID provided!');
+      Alert.alert('Error', 'No pet ID provided');
+      router.back();
+      return;
+    }
     
+    console.log('Fetching pet data for ID:', id);
     setLoading(true);
     const { data, error } = await supabase
       .from('pets')
@@ -52,12 +58,14 @@ export default function EditPetScreen() {
       .single();
 
     if (error) {
-      Alert.alert('Error', 'Failed to load pet data');
+      console.error('Error fetching pet:', error);
+      Alert.alert('Error', `Failed to load pet data: ${error.message}`);
       router.back();
       return;
     }
 
     if (data) {
+      console.log('Pet data loaded:', data);
       setPetName(data.name || '');
       setSpecies(data.species || 'dog');
       setBreed(data.breed || '');
@@ -230,8 +238,10 @@ export default function EditPetScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.primary.brown} />
         </TouchableOpacity>
-        <Text style={styles.title}>Edit {petName}</Text>
-        <Text style={styles.subtitle}>Update your pet's information</Text>
+        <Text style={styles.title}>Edit {petName || 'Pet'}</Text>
+        <Text style={styles.subtitle}>
+          {id ? `ID: ${id.toString().substring(0, 8)}...` : 'No ID received'}
+        </Text>
       </View>
 
       <View style={styles.form}>
@@ -279,7 +289,7 @@ export default function EditPetScreen() {
                 onPress={() => setSpecies(type)}
               >
                 <Ionicons 
-                  name={type === 'dog' ? 'paw' : 'fish'} 
+                  name={type === 'dog' ? 'paw' : 'heart'} 
                   size={22} 
                   color={species === type ? Colors.primary.orangeDark : Colors.neutral.textLight} 
                 />

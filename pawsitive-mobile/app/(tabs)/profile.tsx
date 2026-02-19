@@ -334,7 +334,7 @@ export default function ProfileScreen() {
               ) : (
                 <View style={styles.petProfilePlaceholder}>
                   <Ionicons 
-                    name={pet.species === 'dog' ? 'paw' : pet.species === 'cat' ? 'fish' : 'paw'} 
+                    name={pet.species === 'dog' ? 'paw' : 'heart'} 
                     size={28} 
                     color={Colors.primary.orangeDark} 
                   />
@@ -372,7 +372,7 @@ export default function ProfileScreen() {
                       <Image source={{ uri: pet.profile_photo_url }} style={styles.petIconImage} />
                     ) : (
                       <Ionicons 
-                        name={pet.species === 'dog' ? 'paw' : pet.species === 'cat' ? 'fish' : 'paw'} 
+                        name={pet.species === 'dog' ? 'paw' : 'heart'} 
                         size={24} 
                         color={Colors.primary.orangeDark} 
                       />
@@ -440,7 +440,7 @@ export default function ProfileScreen() {
                     ) : (
                       <View style={styles.modalPetPhotoPlaceholder}>
                         <Ionicons 
-                          name={selectedPet.species === 'dog' ? 'paw' : 'fish'} 
+                          name={selectedPet.species === 'dog' ? 'paw' : 'heart'} 
                           size={60} 
                           color={Colors.primary.orangeDark} 
                         />
