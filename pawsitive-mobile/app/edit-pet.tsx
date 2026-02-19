@@ -111,15 +111,17 @@ export default function EditPetScreen() {
 
     try {
       setUploadingPhoto(true);
-      const response = await fetch(photoUri);
-      const blob = await response.blob();
-      const ext = photoUri.split('.').pop() ?? 'jpg';
-      const fileName = `${userId}/${Date.now()}.${ext}`;
+      const ext = (photoUri.split('.').pop() ?? 'jpg').toLowerCase().replace('jpg', 'jpeg');
+      const mimeType = `image/${ext}`;
+      const filePath = `pet_profiles/${userId}/${Date.now()}.${ext}`;
+
+      const formData = new FormData();
+      formData.append('file', { uri: photoUri, name: `photo.${ext}`, type: mimeType } as any);
 
       const { error: uploadError } = await supabase.storage
-        .from('pet-photos')
-        .upload(fileName, blob, { 
-          contentType: `image/${ext}`,
+        .from('images')
+        .upload(filePath, formData, { 
+          contentType: mimeType,
           upsert: false 
         });
 
@@ -128,7 +130,7 @@ export default function EditPetScreen() {
         return photoUri;
       }
 
-      const { data } = supabase.storage.from('pet-photos').getPublicUrl(fileName);
+      const { data } = supabase.storage.from('images').getPublicUrl(filePath);
       return data.publicUrl;
     } catch (error) {
       console.error('Photo upload failed:', error);

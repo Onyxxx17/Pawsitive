@@ -108,14 +108,16 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     if (!session) return { url: null, error: 'Not authenticated' };
 
     try {
-      const response = await fetch(localUri);
-      const blob = await response.blob();
-      const ext = localUri.split('.').pop() ?? 'jpg';
+      const ext = (localUri.split('.').pop() ?? 'jpg').toLowerCase().replace('jpg', 'jpeg');
       const path = `user_profiles/${session.user.id}/avatar.${ext}`;
+      const mimeType = `image/${ext}`;
+
+      const formData = new FormData();
+      formData.append('file', { uri: localUri, name: `avatar.${ext}`, type: mimeType } as any);
 
       const { error: uploadError } = await supabase.storage
         .from('images')
-        .upload(path, blob, { upsert: true, contentType: `image/${ext}` });
+        .upload(path, formData, { upsert: true, contentType: mimeType });
 
       if (uploadError) return { url: null, error: uploadError.message };
 

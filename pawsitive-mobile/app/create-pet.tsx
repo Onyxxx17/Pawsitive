@@ -61,15 +61,18 @@ export default function CreatePetScreen() {
 
     try {
       setUploadingPhoto(true);
-      const response = await fetch(photoUri);
-      const blob = await response.blob();
-      const ext = photoUri.split('.').pop() ?? 'jpg';
+      const ext = (photoUri.split('.').pop() ?? 'jpg').toLowerCase().replace('jpg', 'jpeg');
+      const mimeType = `image/${ext}`;
       const filePath = `pet_profiles/${userId}/${Date.now()}.${ext}`;
+
+      // FormData is the only reliable way to upload local file:// URIs on React Native
+      const formData = new FormData();
+      formData.append('file', { uri: photoUri, name: `photo.${ext}`, type: mimeType } as any);
 
       const { error: uploadError } = await supabase.storage
         .from('images')
-        .upload(filePath, blob, { 
-          contentType: `image/${ext}`,
+        .upload(filePath, formData, { 
+          contentType: mimeType,
           upsert: false 
         });
 
