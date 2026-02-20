@@ -178,12 +178,6 @@ export default function ActivityScreen() {
     // Combine selected date with selected time
     const reminderDateTime = new Date(selectedDate);
     reminderDateTime.setHours(time.getHours(), time.getMinutes(), 0, 0);
-    
-    // Prevent timezone double conversion by adjusting for local timezone offset
-    // This ensures the time you see is the time that gets saved
-    const utcDate = new Date(
-      reminderDateTime.getTime() - reminderDateTime.getTimezoneOffset() * 60000
-    );
 
     // Check if reminder is in the past
     const now = new Date();
@@ -220,7 +214,7 @@ export default function ActivityScreen() {
         .update({
           title: title.trim(),
           type: reminderType,
-          next_trigger_at: utcDate.toISOString(),
+          next_trigger_at: reminderDateTime.toISOString(),
           recurrence: recurrenceData,
           notification_id: notificationId,
         })
@@ -243,7 +237,7 @@ export default function ActivityScreen() {
           pet_id: activePet.id,
           title: title.trim(),
           type: reminderType,
-          next_trigger_at: utcDate.toISOString(),
+          next_trigger_at: reminderDateTime.toISOString(),
           recurrence: recurrenceData,
           is_active: true,
         })
