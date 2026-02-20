@@ -1,15 +1,103 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { usePet } from '../../context/PetContext';
+import { supabase } from '@/lib/supabase';
+import { useFocusEffect } from '@react-navigation/native';
+
+type Reminder = {
+  id: string;
+  title: string;
+  type: string;
+  next_trigger_at: string;
+  is_active: boolean;
+  recurrence_type?: 'once' | 'daily' | 'weekly' | 'monthly';
+  recurrence_end_date?: string | null;
+};
+
+const REMINDER_TYPE_CONFIG: Record<string, { icon: string; color: string; bgColor: string }> = {
+  feeding: { icon: 'restaurant', color: '#FF6B6B', bgColor: '#FFE5E5' },
+  walking: { icon: 'walk', color: '#4ECDC4', bgColor: '#E0F7F6' },
+  medication: { icon: 'medical', color: '#a053bfff', bgColor: '#F4E8FB' },
+  grooming: { icon: 'cut', color: '#3498DB', bgColor: '#E3F2FD' },
+  checkup: { icon: 'medkit', color: '#2196F3', bgColor: '#E3F2FD' },
+  custom: { icon: 'notifications', color: '#F39C12', bgColor: '#FFF4E0' },
+};
 
 export default function HomeScreen() {
   const router = useRouter();
   const { activePet } = usePet(); // 👈 Using Dynamic Pet Data
+  const [upcomingReminders, setUpcomingReminders] = useState<Reminder[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const greeting = { title: 'Good Morning', icon: 'weather-sunny' };
+
+  useEffect(() => {
+    if (activePet?.id) {
+      fetchUpcomingReminders();
+    }
+  }, [activePet?.id]);
+
+  // Refresh reminders when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (activePet?.id) {
+        fetchUpcomingReminders();
+      }
+    }, [activePet?.id])
+  );
+
+  const fetchUpcomingReminders = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('reminders')
+        .select('*')
+        .eq('pet_id', activePet?.id)
+        .eq('is_active', true)
+        .order('next_trigger_at', { ascending: true });
+
+      if (error) throw error;
+
+      // Filter and process reminders
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      const upcoming = (data || []).filter((reminder) => {
+        const triggerDate = new Date(reminder.next_trigger_at);
+        
+        // Check if reminder has ended
+        if (reminder.recurrence_end_date) {
+          const endDate = new Date(reminder.recurrence_end_date);
+          if (today > endDate) return false;
+        }
+
+        // For recurring reminders, check if they should appear today or in the future
+        if (reminder.recurrence_type && reminder.recurrence_type !== 'once') {
+          const triggerDay = new Date(triggerDate.getFullYear(), triggerDate.getMonth(), triggerDate.getDate());
+          
+          if (reminder.recurrence_type === 'daily') {
+            return true; // Daily reminders are always upcoming
+          } else if (reminder.recurrence_type === 'weekly') {
+            return true; // Weekly reminders will repeat
+          } else if (reminder.recurrence_type === 'monthly') {
+            return true; // Monthly reminders will repeat
+          }
+        }
+        
+        // For one-time reminders or specific dates, only show if in the future
+        return triggerDate >= now;
+      }).slice(0, 2); // Get only the first 2
+
+      setUpcomingReminders(upcoming);
+    } catch (error) {
+      console.error('Error fetching upcoming reminders:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -31,17 +119,63 @@ export default function HomeScreen() {
         <TouchableOpacity onPress={() => router.push('/activity')}><Text style={styles.seeAllText}>Calendar ›</Text></TouchableOpacity>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-        <View style={[styles.reminderCard, { backgroundColor: '#E3F2FD' }]}>
-          <View style={styles.reminderTop}><Ionicons name="medkit" size={20} color="#2196F3" /><Text style={styles.reminderTime}>10:00 AM</Text></View>
-          <Text style={styles.reminderTitle}>Vaccination</Text>
-          <Text style={styles.reminderSub}>Vet Clinic</Text>
+      {loading ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>Loading...</Text>
         </View>
-        <View style={[styles.reminderCard, { backgroundColor: Colors.primary.orange }]}> 
-          <View style={styles.reminderTop}><Ionicons name="walk" size={20} color={Colors.primary.brown} /><Text style={styles.reminderTime}>5:00 PM</Text></View>
-          <Text style={styles.reminderTitle}>Evening Walk</Text>
-        </View>
-      </ScrollView>
+      ) : upcomingReminders.length === 0 ? (
+        <TouchableOpacity 
+          style={styles.emptyReminderCard} 
+          onPress={() => router.push('/activity')}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="calendar-outline" size={32} color={Colors.neutral.textLight} />
+          <Text style={styles.emptyTitle}>Nothing to do today</Text>
+          <Text style={styles.emptySub}>Tap to add a reminder</Text>
+        </TouchableOpacity>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+          {upcomingReminders.map((reminder) => {
+            const config = REMINDER_TYPE_CONFIG[reminder.type] || REMINDER_TYPE_CONFIG.custom;
+            const triggerDate = new Date(reminder.next_trigger_at);
+            const timeStr = triggerDate.toLocaleTimeString('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit', 
+              hour12: true 
+            });
+            
+            return (
+              <TouchableOpacity
+                key={reminder.id}
+                style={[styles.reminderCard, { backgroundColor: config.bgColor }]}
+                onPress={() => {
+                  // Navigate to activity screen with the specific date
+                  router.push({
+                    pathname: '/activity',
+                    params: { 
+                      selectedDate: triggerDate.toISOString(),
+                    }
+                  });
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.reminderTop}>
+                  <Ionicons name={config.icon as any} size={20} color={config.color} />
+                  <Text style={[styles.reminderTime, { color: config.color }]}>{timeStr}</Text>
+                </View>
+                <Text style={[styles.reminderTitle, { color: config.color }]} numberOfLines={1}>
+                  {reminder.title}
+                </Text>
+                {reminder.recurrence_type && reminder.recurrence_type !== 'once' && (
+                  <Text style={[styles.reminderSub, { color: config.color }]}>
+                    {reminder.recurrence_type.charAt(0).toUpperCase() + reminder.recurrence_type.slice(1)}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
 
       {/* Quick Log */}
       <Text style={styles.sectionTitle}>Quick Log</Text>
@@ -78,4 +212,35 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 15 },
   actionBtn: { width: '47%', backgroundColor: '#fff', padding: 15, borderRadius: 16, alignItems: 'center', flexDirection: 'row', gap: 10, elevation: 2 },
   actionLabel: { fontWeight: '600', color: Colors.neutral.text },
+  emptyState: { 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    paddingVertical: 30,
+  },
+  emptyText: { 
+    fontSize: 14, 
+    color: Colors.neutral.textLight,
+  },
+  emptyReminderCard: { 
+    backgroundColor: '#fff', 
+    padding: 30, 
+    borderRadius: 20, 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    marginBottom: 25,
+    borderWidth: 2,
+    borderColor: Colors.neutral.border,
+    borderStyle: 'dashed',
+  },
+  emptyTitle: { 
+    fontSize: 16, 
+    fontWeight: '600', 
+    color: Colors.neutral.text,
+    marginTop: 12,
+  },
+  emptySub: { 
+    fontSize: 14, 
+    color: Colors.neutral.textLight,
+    marginTop: 4,
+  },
 });

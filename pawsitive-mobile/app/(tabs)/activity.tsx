@@ -19,6 +19,7 @@ import {
   cancelNotification,
 } from '@/utils/notifications';
 import ReminderModal, { REMINDER_TYPES } from '@/components/ReminderModal';
+import { useLocalSearchParams } from 'expo-router';
 
 type Reminder = {
   id: string;
@@ -55,8 +56,15 @@ function getWeekDays(weekStart: Date): Date[] {
 
 export default function ActivityScreen() {
   const { activePet } = usePet();
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [weekStart, setWeekStart] = useState(getWeekStart(new Date()));
+  const params = useLocalSearchParams();
+  
+  // Initialize with selected date from params if available
+  const initialDate = params.selectedDate 
+    ? new Date(params.selectedDate as string) 
+    : new Date();
+  
+  const [selectedDate, setSelectedDate] = useState(initialDate);
+  const [weekStart, setWeekStart] = useState(getWeekStart(initialDate));
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   
