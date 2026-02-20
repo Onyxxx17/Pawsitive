@@ -131,8 +131,11 @@ const CustomHeader = () => {
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.menuItem} onPress={() => {
+                console.log('Help & Support clicked');
                 setSidebarOpen(false);
-                // Add your help navigation here
+                setTimeout(() => {
+                  router.push('/help' as any);
+                }, 100);
               }}>
                 <Ionicons name="help-circle-outline" size={24} color={Colors.primary.brown} />
                 <Text style={styles.menuText}>Help & Support</Text>
