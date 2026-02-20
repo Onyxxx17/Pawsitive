@@ -50,7 +50,7 @@ export default function HomeScreen() {
   const greeting = getGreeting();
 
   useEffect(() => {
-    if (activePet?.id) {
+    if (activePet?.id && activePet.id !== 'default') {
       fetchUpcomingReminders();
     }
   }, [activePet?.id]);
@@ -58,7 +58,7 @@ export default function HomeScreen() {
   // Refresh reminders when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      if (activePet?.id) {
+      if (activePet?.id && activePet.id !== 'default') {
         fetchUpcomingReminders();
       }
     }, [activePet?.id])
