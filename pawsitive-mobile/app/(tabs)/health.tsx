@@ -63,14 +63,18 @@ export default function HealthScreen() {
 
     setLoading(true);
     try {
-      // Fetch latest health checks
+      // Calculate date 3 days ago
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      
+      // Fetch health checks from last 3 days only
       const { data: checksData, error: checksError } = await supabase
         .from('health_checks')
         .select('*')
         .eq('pet_id', activePet.id)
         .eq('status', 'complete')
-        .order('created_at', { ascending: false })
-        .limit(5);
+        .gte('created_at', threeDaysAgo.toISOString())
+        .order('created_at', { ascending: false });
 
       // Fetch recent health logs
       const { data: logsData, error: logsError } = await supabase
@@ -78,7 +82,7 @@ export default function HealthScreen() {
         .select('*')
         .eq('pet_id', activePet.id)
         .order('logged_at', { ascending: false })
-        .limit(10);
+        .limit(20);
 
       // Fetch active veterinarians
       const { data: vetsData, error: vetsError } = await supabase
@@ -176,14 +180,31 @@ export default function HealthScreen() {
 
   const getChecksByType = () => {
     const types = ['coat', 'fit', 'teeth', 'poop', 'face'];
+    
     return types.map(type => {
       const checks = healthChecks.filter(c => c.check_type === type);
-      const latestCheck = checks.length > 0 ? checks[0] : null;
+      
+      if (checks.length === 0) {
+        return {
+          type,
+          label: getCheckLabel(type),
+          icon: getCheckIcon(type),
+          check: null,
+          allChecks: [],
+          checkCount: 0,
+        };
+      }
+      
+      // Get latest check for date/details
+      const latestCheck = checks[0];
+      
       return {
         type,
         label: getCheckLabel(type),
         icon: getCheckIcon(type),
         check: latestCheck,
+        allChecks: checks, // Last 3 days of checks
+        checkCount: checks.length,
       };
     });
   };
@@ -381,14 +402,21 @@ export default function HealthScreen() {
                       <View style={styles.reportInfo}>
                         <Text style={styles.reportLabel}>{item.label}</Text>
                         {hasData && item.check && (
-                          <Text style={styles.reportDate}>
-                            {new Date(item.check.created_at).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit'
-                            })}
-                          </Text>
+                          <>
+                            <Text style={styles.reportDate}>
+                              Latest: {new Date(item.check.created_at).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit'
+                              })}
+                            </Text>
+                            {item.checkCount > 1 && (
+                              <Text style={styles.reportCheckCount}>
+                                Last 3 days ({item.checkCount} checks)
+                              </Text>
+                            )}
+                          </>
                         )}
                       </View>
                       <View style={styles.reportScore}>
@@ -431,6 +459,42 @@ export default function HealthScreen() {
                             </View>
                           </View>
                         )}
+                      </View>
+                    )}
+
+                    {/* Historical Data */}
+                    {hasData && item.allChecks && item.allChecks.length > 0 && (
+                      <View style={styles.historySection}>
+                        <Text style={styles.historyTitle}>History ({item.allChecks.length} checks)</Text>
+                        {item.allChecks.map((check, idx) => (
+                          <View key={check.id} style={styles.historyItem}>
+                            <View style={styles.historyLeft}>
+                              <Text style={styles.historyDate}>
+                                {new Date(check.created_at).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </Text>
+                              <Text style={styles.historyTime}>
+                                {new Date(check.created_at).toLocaleTimeString('en-US', {
+                                  hour: 'numeric',
+                                  minute: '2-digit'
+                                })}
+                              </Text>
+                            </View>
+                            <View style={styles.historyRight}>
+                              <Text style={[
+                                styles.historyScore,
+                                { color: check.score >= 90 ? Colors.health.excellent : 
+                                         check.score >= 75 ? Colors.health.good : 
+                                         check.score >= 60 ? Colors.health.fair : Colors.health.poor }
+                              ]}>
+                                {Math.round(check.score)}
+                              </Text>
+                            </View>
+                          </View>
+                        ))}
                       </View>
                     )}
 
@@ -605,6 +669,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.neutral.textLight,
   },
+  reportCheckCount: {
+    fontSize: 11,
+    color: Colors.primary.orangeDark,
+    fontWeight: '600',
+    marginTop: 2,
+  },
   reportScore: {
     alignItems: 'center',
   },
@@ -663,5 +733,49 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     paddingVertical: 8,
+  },
+  
+  // History Styles
+  historySection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.neutral.border,
+  },
+  historyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.primary.brown,
+    marginBottom: 12,
+  },
+  historyItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  historyLeft: {
+    flex: 1,
+  },
+  historyDate: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primary.brown,
+    marginBottom: 2,
+  },
+  historyTime: {
+    fontSize: 11,
+    color: Colors.neutral.textLight,
+  },
+  historyRight: {
+    marginLeft: 12,
+  },
+  historyScore: {
+    fontSize: 24,
+    fontWeight: '800',
   },
 });
