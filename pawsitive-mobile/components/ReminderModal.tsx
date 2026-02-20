@@ -160,6 +160,7 @@ export default function ReminderModal({
                   value={time}
                   mode="time"
                   display="spinner"
+                  textColor="#000000"
                   onChange={(_event: any, selectedTime?: Date) => {
                     if (Platform.OS === 'android') {
                       onShowTimePicker(false);
@@ -250,6 +251,7 @@ export default function ReminderModal({
                       value={endDate || new Date()}
                       mode="date"
                       display="spinner"
+                      textColor="#000000"
                       minimumDate={new Date()}
                       onChange={(_event: any, selectedDate?: Date) => {
                         if (Platform.OS === 'android') {
