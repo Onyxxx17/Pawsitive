@@ -119,10 +119,15 @@ CREATE TABLE reminders (
     user_id                 UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     pet_id                  UUID NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
     title                   VARCHAR(200) NOT NULL,
+    description             TEXT,
     type                    reminder_type NOT NULL,
     recurrence              JSONB,
-    next_trigger_at         TIMESTAMP,
+    next_trigger_at         TIMESTAMP NOT NULL,
+    last_triggered_at       TIMESTAMP,
     is_active               BOOLEAN DEFAULT TRUE,
+    is_completed            BOOLEAN DEFAULT FALSE,
+    completed_at            TIMESTAMP,
+    notification_id         TEXT,
     created_at              TIMESTAMP DEFAULT NOW(),
     updated_at              TIMESTAMP DEFAULT NOW()
 );
