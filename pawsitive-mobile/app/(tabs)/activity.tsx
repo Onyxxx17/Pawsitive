@@ -19,8 +19,11 @@ import {
   cancelNotification,
 } from '@/utils/notifications';
 import ReminderModal, { REMINDER_TYPES } from '@/components/ReminderModal';
+import CalendarImportModal from '@/components/CalendarImportModal';
+import CalendarEventCard from '@/components/CalendarEventCard';
 import { useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { getCalendarEvents } from '@/utils/calendarUtils';
 
 type Reminder = {
   id: string;
@@ -32,6 +35,18 @@ type Reminder = {
   recurrence_type?: 'once' | 'daily' | 'weekly' | 'monthly';
   recurrence_end_date?: string | null;
   notification_id?: string;
+};
+
+type CalendarEvent = {
+  id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+  description?: string;
+  location?: string;
+  is_all_day: boolean;
+  has_notification: boolean;
+  external_event_id: string;
 };
 
 type ReminderType = 'feeding' | 'walking' | 'medication' | 'grooming' | 'checkup' | 'custom';
@@ -62,7 +77,9 @@ export default function ActivityScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStart, setWeekStart] = useState(getWeekStart(new Date()));
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
+  const [importModalVisible, setImportModalVisible] = useState(false);
   
   // Handle navigation with date parameter
   useFocusEffect(
@@ -116,6 +133,7 @@ export default function ActivityScreen() {
     if (activePet?.id && activePet.id !== 'default') {
       fetchReminders();
     }
+    fetchCalendarEvents(); // Always fetch calendar events regardless of pet selection
   }, [activePet, selectedDate]);
 
   // Request notification permissions on mount
@@ -198,6 +216,94 @@ export default function ActivityScreen() {
       });
 
       setReminders(filteredReminders);
+    }
+  };
+
+  const fetchCalendarEvents = async () => {
+    const startOfDay = new Date(selectedDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(selectedDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    console.log('📅 Fetching calendar events for:', selectedDate.toLocaleDateString());
+    console.log('📅 Date range:', startOfDay.toISOString(), 'to', endOfDay.toISOString());
+
+    const { data, error } = await supabase
+      .from('calendar_events')
+      .select('*')
+      .eq('user_id', user.id)
+      .gte('start_time', startOfDay.toISOString())  // Event starts on or after start of day
+      .lte('start_time', endOfDay.toISOString())   // Event starts on or before end of day
+      .order('start_time', { ascending: true });
+
+    if (!error && data) {
+      console.log('✅ Found', data.length, 'calendar events');
+      if (data.length > 0) {
+        console.log('📋 Events:', data.map(e => ({ title: e.title, start: e.start_time })));
+      }
+      setCalendarEvents(data);
+    } else if (error) {
+      console.error('❌ Error fetching calendar events:', error);
+    }
+  };
+
+  const handleImportComplete = async (eventCount: number) => {
+    // Sync calendar events to database
+    await syncCalendarEvents();
+    fetchCalendarEvents();
+  };
+
+  const syncCalendarEvents = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get events from device calendars for next 60 days
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 60);
+
+      // This would need calendar IDs - for now we'll just refresh from DB
+      fetchCalendarEvents();
+    } catch (error) {
+      console.error('Error syncing calendar events:', error);
+    }
+  };
+
+  const handleToggleEventNotification = async (eventId: string, enabled: boolean) => {
+    const { error } = await supabase
+      .from('calendar_events')
+      .update({ has_notification: enabled })
+      .eq('id', eventId);
+
+    if (!error) {
+      fetchCalendarEvents();
+      // TODO: Schedule/cancel notification based on enabled flag
+    } else {
+      throw error;
+    }
+  };
+
+  const handleEditEvent = (eventId: string) => {
+    Alert.alert('Edit Event', 'Event editing coming soon!');
+    // TODO: Implement event editing
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    const { error } = await supabase
+      .from('calendar_events')
+      .delete()
+      .eq('id', eventId);
+
+    if (!error) {
+      fetchCalendarEvents();
+      Alert.alert('Success', 'Event deleted');
+    } else {
+      Alert.alert('Error', 'Failed to delete event');
     }
   };
 
@@ -590,26 +696,34 @@ export default function ActivityScreen() {
             day: 'numeric' 
           })}
         </Text>
-        {!isPastDate(selectedDate) && (
+        <View style={styles.headerActions}>
           <TouchableOpacity 
-            style={styles.addButton}
-            onPress={() => {
-              resetForm(); // Reset form before opening modal for new reminder
-              setModalVisible(true);
-            }}
+            style={styles.importIconButton}
+            onPress={() => setImportModalVisible(true)}
           >
-            <Ionicons name="add-circle" size={32} color={Colors.primary.orangeDark} />
+            <Ionicons name="calendar" size={28} color={Colors.primary.brown} />
           </TouchableOpacity>
-        )}
+          {!isPastDate(selectedDate) && (
+            <TouchableOpacity 
+              style={styles.addButton}
+              onPress={() => {
+                resetForm(); // Reset form before opening modal for new reminder
+                setModalVisible(true);
+              }}
+            >
+              <Ionicons name="add-circle" size={32} color={Colors.primary.orangeDark} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Reminders List */}
       <ScrollView style={styles.remindersList} showsVerticalScrollIndicator={false}>
-        {reminders.length === 0 ? (
+        {reminders.length === 0 && calendarEvents.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="calendar-outline" size={48} color={Colors.neutral.textLight} />
-            <Text style={styles.emptyText}>No reminders for this day</Text>
-            <Text style={styles.emptySubtext}>Tap + to create one</Text>
+            <Text style={styles.emptyText}>No reminders or events for this day</Text>
+            <Text style={styles.emptySubtext}>Tap + to create one or import from calendar</Text>
           </View>
         ) : (
           <>
@@ -665,6 +779,29 @@ export default function ActivityScreen() {
                       </TouchableOpacity>
                     </View>
                   ))}
+              </>
+            )}
+
+            {/* Calendar Events */}
+            {calendarEvents.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>📅 Calendar Events</Text>
+                {calendarEvents.map((event) => (
+                  <CalendarEventCard
+                    key={event.id}
+                    id={event.id}
+                    title={event.title}
+                    startTime={new Date(event.start_time)}
+                    endTime={new Date(event.end_time)}
+                    location={event.location}
+                    description={event.description}
+                    hasNotification={event.has_notification}
+                    isAllDay={event.is_all_day}
+                    onToggleNotification={handleToggleEventNotification}
+                    onEdit={handleEditEvent}
+                    onDelete={handleDeleteEvent}
+                  />
+                ))}
               </>
             )}
 
@@ -750,6 +887,13 @@ export default function ActivityScreen() {
         onShowEndDatePicker={setShowEndDatePicker}
         onSubmit={handleCreateReminder}
       />
+
+      {/* Calendar Import Modal */}
+      <CalendarImportModal
+        visible={importModalVisible}
+        onClose={() => setImportModalVisible(false)}
+        onImportComplete={handleImportComplete}
+      />
     </View>
   );
 }
@@ -818,6 +962,8 @@ const styles = StyleSheet.create({
   },
   selectedDateHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   selectedDateText: { fontSize: 16, fontWeight: '600', color: Colors.primary.brown },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  importIconButton: { padding: 4 },
   addButton: { padding: 4 },
   remindersList: { flex: 1 },
   sectionTitle: {
