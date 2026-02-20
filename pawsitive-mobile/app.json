@@ -14,7 +14,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "This app needs access to your camera to take photos of your pets.",
         "NSMicrophoneUsageDescription": "This app needs access to your microphone.",
-        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select pet photos."
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select pet photos.",
+        "NSUserNotificationsUsageDescription": "This app needs to send you notifications for pet reminders."
       }
     },
     "android": {
@@ -30,7 +31,8 @@
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
-        "MODIFY_AUDIO_SETTINGS"
+        "MODIFY_AUDIO_SETTINGS",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -55,6 +57,14 @@
         "expo-camera",
         {
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera for pet photos."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#E8A87C",
+          "sounds": []
         }
       ]
     ],
