@@ -1,10 +1,44 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '@/lib/supabase';
+import NotificationPanel from './NotificationPanel';
 
 export default function Header() {
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  // Fetch notification count
+  const fetchNotificationCount = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(23, 59, 59, 999);
+
+    const { count } = await supabase
+      .from('reminders')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .eq('is_completed', false)
+      .gte('next_trigger_at', now.toISOString())
+      .lte('next_trigger_at', tomorrow.toISOString());
+
+    setNotificationCount(count || 0);
+  };
+
+  // Auto-refresh count every minute
+  useEffect(() => {
+    fetchNotificationCount();
+    const interval = setInterval(fetchNotificationCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <View style={{ backgroundColor: Colors.neutral.background }}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -21,12 +55,25 @@ export default function Header() {
           </View>
 
           {/* Right: Notifications */}
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity 
+            style={styles.iconButton}
+            onPress={() => setShowNotifications(true)}
+          >
             <Ionicons name="notifications-outline" size={24} color={Colors.primary.brown} />
-            <View style={styles.badge} />
+            {notificationCount > 0 && (
+              <View style={styles.badgeWithCount}>
+                <Text style={styles.badgeText}>{notificationCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      {/* Notifications Panel */}
+      <NotificationPanel 
+        visible={showNotifications}
+        onClose={() => setShowNotifications(false)}
+      />
     </View>
   );
 }
@@ -34,7 +81,6 @@ export default function Header() {
 const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: Colors.neutral.background,
-    // Add a little extra padding for Android if needed
     paddingTop: Platform.OS === 'android' ? 10 : 0, 
   },
   container: {
@@ -70,15 +116,23 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  badge: {
+  badgeWithCount: {
     position: 'absolute',
-    top: 8,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 6,
+    right: 6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: Colors.primary.orange,
-    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
     borderColor: '#fff',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
