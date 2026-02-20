@@ -25,6 +25,10 @@ def analyze_pet_poop(poop_photo_path):
     result = analyze_pet_photo(poop_photo_path, "poop_analysis")
     return result
 
+def analyze_body_weight(photo_path):
+    result = analyze_pet_photo(photo_path, "body_weight")
+    return result
+
 def format_json(result):
     try:
         result = clean_json(result)
