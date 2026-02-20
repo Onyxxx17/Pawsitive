@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useNavigation, useRouter } from 'expo-router';
@@ -12,6 +12,7 @@ const initialMessages = [
 export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState(initialMessages);
+  const [isSending, setIsSending] = useState(false);
   const navigation = useNavigation();
   const router = useRouter();
 
@@ -34,15 +35,36 @@ export default function ChatScreen() {
     };
   }, [navigation]);
 
-  const sendMessage = () => {
-    if (inputText.trim()) {
+  const sendMessage = async () => {
+    if (inputText.trim() && !isSending) {
       const userMsg = { id: Date.now().toString(), text: inputText, sender: 'user' };
       setMessages(prev => [...prev, userMsg]);
       setInputText('');
-      setTimeout(() => {
-        const botMsg = { id: (Date.now()+1).toString(), text: "That's good to hear! 🐶", sender: 'bot' };
-        setMessages(prev => [...prev, botMsg]);
-      }, 1000);
+      setIsSending(true);
+
+      try {
+        console.log(`${process.env.EXPO_PUBLIC_BACKEND_API_URL}`);
+        console.log(`${process.env.EXPO_PUBLIC_SUPABASE_URL}`);
+        const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_API_URL}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: inputText }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const botMsg = { id: Date.now().toString(), text: data.response, sender: 'bot' };
+          setMessages(prev => [...prev, botMsg]);
+        } else {
+          const errorMsg = { id: Date.now().toString(), text: 'Oops! Something went wrong. Please try again.', sender: 'bot' };
+          setMessages(prev => [...prev, errorMsg]);
+        }
+      } catch (error) {
+        const errorMsg = { id: Date.now().toString(), text: 'Unable to connect. Please check your internet connection.', sender: 'bot' };
+        setMessages(prev => [...prev, errorMsg]);
+      } finally {
+        setIsSending(false);
+      }
     }
   };
 
@@ -90,9 +112,14 @@ export default function ChatScreen() {
             placeholder="Ask PawPal..." 
             placeholderTextColor="#999"
             multiline
+            editable={!isSending}
           />
-          <TouchableOpacity style={styles.sendBtn} onPress={sendMessage}>
-            <Ionicons name="arrow-up" size={24} color="#fff" />
+          <TouchableOpacity style={[styles.sendBtn, isSending && { backgroundColor: '#ccc' }]} onPress={sendMessage} disabled={isSending}>
+            {isSending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="arrow-up" size={24} color="#fff" />
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

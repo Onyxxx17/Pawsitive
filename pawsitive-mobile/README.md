@@ -15,3 +15,6 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    ```bash
    npx expo start
    ```
+
+## Note
+In the .env file, change the ip address for <i>EXPO_PUBLIC_BACKEND_API_URL</i> to your machine's local IP address (found using ipconfig).

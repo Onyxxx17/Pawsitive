@@ -54,6 +54,9 @@ def reformat_json(result):
     repaired = clean_json(response.text)
     return repaired
 
+def process_message():
+    return "Processed"
+
 # def main():
 #     poop_photo_path = "assets/images/pet_poop.jpg"
 #     result = analyze_pet_poop(poop_photo_path)
