@@ -5,10 +5,7 @@ import {
   StyleSheet, 
   ScrollView, 
   TouchableOpacity,
-  Modal,
-  TextInput,
   Alert,
-  Platform,
   Animated,
   PanResponder,
 } from 'react-native';
@@ -16,12 +13,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
 import { usePet } from '../../context/PetContext';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { 
   registerForPushNotificationsAsync, 
   scheduleReminderNotification,
   cancelNotification,
 } from '@/utils/notifications';
+import ReminderModal, { REMINDER_TYPES } from '@/components/ReminderModal';
 
 type Reminder = {
   id: string;
@@ -30,27 +27,12 @@ type Reminder = {
   next_trigger_at: string;
   is_active: boolean;
   is_completed?: boolean;
-  recurrence?: any;
+  recurrence_type?: 'once' | 'daily' | 'weekly' | 'monthly';
+  recurrence_end_date?: string | null;
   notification_id?: string;
 };
 
 type ReminderType = 'feeding' | 'walking' | 'medication' | 'grooming' | 'checkup' | 'custom';
-
-const REMINDER_TYPES = [
-  { value: 'feeding', label: 'Feeding', icon: 'restaurant' },
-  { value: 'walking', label: 'Walk', icon: 'walk' },
-  { value: 'medication', label: 'Medicine', icon: 'medical' },
-  { value: 'grooming', label: 'Groom', icon: 'cut' },
-  { value: 'checkup', label: 'Vet', icon: 'medkit' },
-  { value: 'custom', label: 'Custom', icon: 'add-circle' },
-];
-
-const RECURRENCE_OPTIONS = [
-  { value: 'once', label: 'Once' },
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-];
 
 // Helper function to get the start of the week (Sunday)
 function getWeekStart(date: Date): Date {
@@ -84,7 +66,9 @@ export default function ActivityScreen() {
   const [reminderType, setReminderType] = useState<ReminderType>('feeding');
   const [time, setTime] = useState(new Date());
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [recurrence, setRecurrence] = useState('daily');
+  const [recurrence, setRecurrence] = useState('once');
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
   // Swipe gesture
   const pan = useRef(new Animated.Value(0)).current;
@@ -152,12 +136,52 @@ export default function ActivityScreen() {
       .from('reminders')
       .select('*')
       .eq('pet_id', activePet.id)
-      .gte('next_trigger_at', startOfDay.toISOString())
-      .lte('next_trigger_at', endOfDay.toISOString())
+      .eq('is_active', true)
       .order('next_trigger_at', { ascending: true });
 
     if (!error && data) {
-      setReminders(data);
+      // Filter reminders to show on selected date
+      const filteredReminders = data.filter(reminder => {
+        const triggerDate = new Date(reminder.next_trigger_at);
+        const recurrenceType = reminder.recurrence_type;
+
+        // Check if past end date for recurring reminders
+        if (recurrenceType && recurrenceType !== 'once' && reminder.recurrence_end_date) {
+          const endDate = new Date(reminder.recurrence_end_date);
+          endDate.setHours(23, 59, 59, 999);
+          if (selectedDate > endDate) {
+            return false; // Don't show if past end date
+          }
+        }
+
+        // One-time reminders: only show if on selected date
+        if (!recurrenceType || recurrenceType === 'once') {
+          return triggerDate >= startOfDay && triggerDate <= endOfDay;
+        }
+
+        // Daily reminders: show on all days from trigger date to end date (or forever)
+        if (recurrenceType === 'daily') {
+          return triggerDate <= endOfDay; // Show if started
+        }
+
+        // Weekly reminders: show if same day of week
+        if (recurrenceType === 'weekly') {
+          const isSameDay = triggerDate.getDay() === selectedDate.getDay();
+          const hasStarted = triggerDate <= endOfDay;
+          return isSameDay && hasStarted;
+        }
+
+        // Monthly reminders: show if same date of month
+        if (recurrenceType === 'monthly') {
+          const isSameDate = triggerDate.getDate() === selectedDate.getDate();
+          const hasStarted = triggerDate <= endOfDay;
+          return isSameDate && hasStarted;
+        }
+
+        return false;
+      });
+
+      setReminders(filteredReminders);
     }
   };
 
@@ -190,7 +214,15 @@ export default function ActivityScreen() {
       return;
     }
 
-    const recurrenceData = recurrence !== 'once' ? { type: recurrence } : null;
+    // Validate end date is after start date for recurring reminders
+    if (recurrence !== 'once' && endDate && endDate < selectedDate) {
+      Alert.alert(
+        'Invalid End Date',
+        'End date must be after the start date.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
 
     if (editingId) {
       // Update existing reminder
@@ -200,11 +232,12 @@ export default function ActivityScreen() {
         await cancelNotification(existingReminder.notification_id);
       }
 
-      // Schedule new notification with pet name
+      // Schedule new notification with recurrence and pet name
       const notificationId = await scheduleReminderNotification(
         editingId,
         title.trim(),
         reminderDateTime,
+        recurrence,
         reminderType,
         activePet?.name
       );
@@ -215,7 +248,8 @@ export default function ActivityScreen() {
           title: title.trim(),
           type: reminderType,
           next_trigger_at: reminderDateTime.toISOString(),
-          recurrence: recurrenceData,
+          recurrence_type: recurrence,
+          recurrence_end_date: endDate ? endDate.toISOString().split('T')[0] : null,
           notification_id: notificationId,
         })
         .eq('id', editingId);
@@ -238,7 +272,8 @@ export default function ActivityScreen() {
           title: title.trim(),
           type: reminderType,
           next_trigger_at: reminderDateTime.toISOString(),
-          recurrence: recurrenceData,
+          recurrence_type: recurrence,
+          recurrence_end_date: endDate ? endDate.toISOString().split('T')[0] : null,
           is_active: true,
         })
         .select()
@@ -247,11 +282,12 @@ export default function ActivityScreen() {
       if (error) {
         Alert.alert('Error', error.message);
       } else if (data) {
-        // Schedule notification for the new reminder with pet name
+        // Schedule notification for the new reminder with recurrence and pet name
         const notificationId = await scheduleReminderNotification(
           data.id,
           title.trim(),
           reminderDateTime,
+          recurrence,
           reminderType,
           activePet?.name
         );
@@ -299,7 +335,9 @@ export default function ActivityScreen() {
     const defaultTime = new Date();
     defaultTime.setMinutes(0, 0, 0); // Round to top of current hour
     setTime(defaultTime);
-    setRecurrence('daily');
+    setRecurrence('once');
+    setEndDate(null);
+    setShowEndDatePicker(false);
   };
 
   const handleEditReminder = (reminder: Reminder) => {
@@ -311,40 +349,105 @@ export default function ActivityScreen() {
     const reminderDate = new Date(reminder.next_trigger_at);
     setTime(reminderDate);
     
-    setRecurrence(reminder.recurrence?.type || 'once');
+    setRecurrence(reminder.recurrence_type || 'once');
+    
+    // Load end date if it exists
+    if (reminder.recurrence_end_date) {
+      setEndDate(new Date(reminder.recurrence_end_date));
+    } else {
+      setEndDate(null);
+    }
+    
     setModalVisible(true);
   };
 
   const handleDeleteReminder = (id: string, title: string) => {
-    Alert.alert(
-      'Delete Reminder',
-      `Are you sure you want to delete "${title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            // Cancel notification before deleting
-            const reminder = reminders.find(r => r.id === id);
-            if (reminder?.notification_id) {
-              await cancelNotification(reminder.notification_id);
-            }
+    const reminder = reminders.find(r => r.id === id);
+    const isRecurring = reminder?.recurrence_type && reminder.recurrence_type !== 'once';
 
-            const { error } = await supabase
-              .from('reminders')
-              .delete()
-              .eq('id', id);
+    if (isRecurring) {
+      // For recurring reminders, ask which occurrences to delete
+      Alert.alert(
+        'Delete Recurring Reminder',
+        `"${title}" is a recurring reminder. What would you like to delete?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'This & Future',
+            style: 'destructive',
+            onPress: async () => {
+              // Set end date to yesterday (stops showing from today onwards)
+              const yesterday = new Date(selectedDate);
+              yesterday.setDate(yesterday.getDate() - 1);
+              
+              const { error } = await supabase
+                .from('reminders')
+                .update({
+                  recurrence_end_date: yesterday.toISOString().split('T')[0]
+                })
+                .eq('id', id);
 
-            if (error) {
-              Alert.alert('Error', error.message);
-            } else {
-              fetchReminders();
-            }
+              if (error) {
+                Alert.alert('Error', error.message);
+              } else {
+                fetchReminders();
+              }
+            },
           },
-        },
-      ]
-    );
+          {
+            text: 'All Occurrences',
+            style: 'destructive',
+            onPress: async () => {
+              // Cancel notification before deleting
+              if (reminder?.notification_id) {
+                await cancelNotification(reminder.notification_id);
+              }
+
+              const { error } = await supabase
+                .from('reminders')
+                .delete()
+                .eq('id', id);
+
+              if (error) {
+                Alert.alert('Error', error.message);
+              } else {
+                fetchReminders();
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      // For one-time reminders, simple delete
+      Alert.alert(
+        'Delete Reminder',
+        `Are you sure you want to delete "${title}"?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              // Cancel notification before deleting
+              if (reminder?.notification_id) {
+                await cancelNotification(reminder.notification_id);
+              }
+
+              const { error } = await supabase
+                .from('reminders')
+                .delete()
+                .eq('id', id);
+
+              if (error) {
+                Alert.alert('Error', error.message);
+              } else {
+                fetchReminders();
+              }
+            },
+          },
+        ]
+      );
+    }
   };
 
   const handleTypeChange = (type: ReminderType) => {
@@ -533,7 +636,7 @@ export default function ActivityScreen() {
                           </Text>
                           <Text style={styles.reminderTime}>
                             {formatTime(reminder.next_trigger_at)}
-                            {reminder.recurrence && ` • ${reminder.recurrence.type}`}
+                            {reminder.recurrence_type && reminder.recurrence_type !== 'once' && ` • ${reminder.recurrence_type}`}
                           </Text>
                         </View>
                       </TouchableOpacity>
@@ -588,7 +691,7 @@ export default function ActivityScreen() {
                           </Text>
                           <Text style={styles.reminderTime}>
                             {formatTime(reminder.next_trigger_at)}
-                            {reminder.recurrence && ` • ${reminder.recurrence.type}`}
+                            {reminder.recurrence_type && reminder.recurrence_type !== 'once' && ` • ${reminder.recurrence_type}`}
                           </Text>
                         </View>
                       </TouchableOpacity>
@@ -608,141 +711,29 @@ export default function ActivityScreen() {
       </ScrollView>
 
       {/* Create Reminder Modal */}
-      <Modal
+      <ReminderModal
         visible={modalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{editingId ? 'Edit Reminder' : 'New Reminder'}</Text>
-              <TouchableOpacity onPress={() => {
-                setModalVisible(false);
-                resetForm();
-              }}>
-                <Ionicons name="close" size={28} color={Colors.primary.brown} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Reminder Type */}
-              <Text style={styles.label}>Type</Text>
-              <View style={styles.typeGrid}>
-                {REMINDER_TYPES.map((type) => (
-                  <TouchableOpacity
-                    key={type.value}
-                    style={[
-                      styles.typeButton,
-                      reminderType === type.value && styles.typeButtonSelected,
-                    ]}
-                    onPress={() => handleTypeChange(type.value as ReminderType)}
-                  >
-                    <Ionicons
-                      name={type.icon as any}
-                      size={20}
-                      color={reminderType === type.value ? '#FFF' : Colors.primary.brown}
-                    />
-                    <Text style={[
-                      styles.typeButtonText,
-                      reminderType === type.value && styles.typeButtonTextSelected,
-                    ]}>
-                      {type.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Title */}
-              <Text style={styles.label}>Title</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  reminderType !== 'custom' && styles.inputDisabled
-                ]}
-                value={title}
-                onChangeText={setTitle}
-                placeholder={reminderType === 'custom' ? "Enter custom title" : "Auto-filled from type"}
-                placeholderTextColor={Colors.neutral.textLight}
-                editable={reminderType === 'custom'}
-              />
-
-              {/* Time */}
-              <Text style={styles.label}>Time</Text>
-              <TouchableOpacity
-                style={styles.timeButton}
-                onPress={() => setShowTimePicker(true)}
-              >
-                <Ionicons name="time-outline" size={20} color={Colors.primary.brown} />
-                <Text style={styles.timeButtonText}>
-                  {time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
-                </Text>
-              </TouchableOpacity>
-
-              {showTimePicker && (
-                <View style={styles.timePickerContainer}>
-                  <DateTimePicker
-                    value={time}
-                    mode="time"
-                    display="spinner"
-                    onChange={(_event: any, selectedTime?: Date) => {
-                      if (Platform.OS === 'android') {
-                        setShowTimePicker(false);
-                      }
-                      if (selectedTime) {
-                        setTime(selectedTime);
-                      }
-                    }}
-                  />
-                  {Platform.OS === 'ios' && (
-                    <TouchableOpacity
-                      style={styles.doneButton}
-                      onPress={() => setShowTimePicker(false)}
-                    >
-                      <Text style={styles.doneButtonText}>Done</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-
-              {/* Repeat */}
-              <Text style={styles.label}>Repeat</Text>
-              <View style={styles.recurrenceButtons}>
-                {RECURRENCE_OPTIONS.map((option) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.recurrenceButton,
-                      recurrence === option.value && styles.recurrenceButtonSelected,
-                    ]}
-                    onPress={() => setRecurrence(option.value)}
-                  >
-                    <Text style={[
-                      styles.recurrenceButtonText,
-                      recurrence === option.value && styles.recurrenceButtonTextSelected,
-                    ]}>
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Create Button */}
-              <TouchableOpacity
-                style={styles.createButton}
-                onPress={handleCreateReminder}
-              >
-                <Text style={styles.createButtonText}>
-                  {editingId ? 'Update Reminder' : 'Create Reminder'}
-                </Text>
-              </TouchableOpacity>
-
-              <View style={{ height: 40 }} />
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+        editingId={editingId}
+        reminderType={reminderType}
+        title={title}
+        time={time}
+        recurrence={recurrence}
+        endDate={endDate}
+        showTimePicker={showTimePicker}
+        showEndDatePicker={showEndDatePicker}
+        onClose={() => {
+          setModalVisible(false);
+          resetForm();
+        }}
+        onTypeChange={handleTypeChange}
+        onTitleChange={setTitle}
+        onTimeChange={setTime}
+        onRecurrenceChange={setRecurrence}
+        onEndDateChange={setEndDate}
+        onShowTimePicker={setShowTimePicker}
+        onShowEndDatePicker={setShowEndDatePicker}
+        onSubmit={handleCreateReminder}
+      />
     </View>
   );
 }
@@ -864,94 +855,4 @@ const styles = StyleSheet.create({
   deleteButton: {
     padding: 8,
   },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '80%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: Colors.primary.brown },
-  label: { fontSize: 14, fontWeight: '600', color: Colors.primary.brown, marginBottom: 8, marginTop: 12 },
-  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  typeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: Colors.neutral.background,
-    borderWidth: 1,
-    borderColor: Colors.neutral.border,
-    gap: 6,
-  },
-  typeButtonSelected: { backgroundColor: Colors.primary.orangeDark, borderColor: Colors.primary.orangeDark },
-  typeButtonText: { fontSize: 14, color: Colors.primary.brown },
-  typeButtonTextSelected: { color: '#FFF', fontWeight: '600' },
-  input: {
-    backgroundColor: Colors.neutral.background,
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 16,
-    color: Colors.primary.brown,
-    borderWidth: 1,
-    borderColor: Colors.neutral.border,
-  },
-  inputDisabled: {
-    backgroundColor: '#F5F5F5',
-    color: Colors.neutral.textLight,
-  },
-  timeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.neutral.background,
-    borderRadius: 12,
-    padding: 14,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: Colors.neutral.border,
-  },
-  timeButtonText: { 
-    fontSize: 16, 
-    color: Colors.primary.brown,
-    fontWeight: '500',
-  },
-  timePickerContainer: {
-    backgroundColor: Colors.neutral.background,
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 12,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: Colors.neutral.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  doneButton: {
-    backgroundColor: Colors.primary.orangeDark,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  doneButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  recurrenceButtons: { flexDirection: 'row', gap: 8 },
-  recurrenceButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: Colors.neutral.background,
-    borderWidth: 1,
-    borderColor: Colors.neutral.border,
-    alignItems: 'center',
-  },
-  recurrenceButtonSelected: { backgroundColor: Colors.primary.orangeDark, borderColor: Colors.primary.orangeDark },
-  recurrenceButtonText: { fontSize: 14, color: Colors.primary.brown },
-  recurrenceButtonTextSelected: { color: '#FFF', fontWeight: '600' },
-  createButton: { backgroundColor: Colors.primary.orange, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 24 },
-  createButtonText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
 });

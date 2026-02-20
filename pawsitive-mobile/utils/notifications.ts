@@ -49,24 +49,17 @@ export async function registerForPushNotificationsAsync() {
 }
 
 /**
- * Schedule a notification for a reminder
+ * Schedule a notification for a reminder with recurrence support
  */
 export async function scheduleReminderNotification(
   reminderId: string,
   title: string,
   triggerDate: Date,
+  recurrenceType: string,
   type: string,
   petName?: string
 ): Promise<string | null> {
   try {
-    const trigger = triggerDate.getTime() - Date.now();
-    
-    // Don't schedule if time is in the past
-    if (trigger <= 0) {
-      console.log('⚠️ Cannot schedule notification for past time');
-      return null;
-    }
-
     // Customize notification content based on type
     const typeMessages: { [key: string]: { emoji: string; body: string } } = {
       feeding: { 
@@ -98,20 +91,68 @@ export async function scheduleReminderNotification(
     const messageConfig = typeMessages[type] || typeMessages.custom;
     const notificationTitle = `${messageConfig.emoji} ${title}`;
 
+    let trigger: any;
+
+    if (recurrenceType === 'once') {
+      // One-time notification
+      const triggerMs = triggerDate.getTime() - Date.now();
+      
+      if (triggerMs <= 0) {
+        console.log('⚠️ Cannot schedule notification for past time');
+        return null;
+      }
+
+      trigger = {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: Math.floor(triggerMs / 1000),
+      };
+    } else {
+      // Repeating notification (daily, weekly, monthly)
+      const hour = triggerDate.getHours();
+      const minute = triggerDate.getMinutes();
+
+      if (recurrenceType === 'daily') {
+        // Repeats every day at the same time
+        trigger = {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour,
+          minute,
+          repeats: true,
+        };
+      } else if (recurrenceType === 'weekly') {
+        // Repeats every week on the same day
+        const weekday = triggerDate.getDay() + 1; // expo uses 1-7 (Sunday = 1)
+        trigger = {
+          type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+          weekday,
+          hour,
+          minute,
+          repeats: true,
+        };
+      } else if (recurrenceType === 'monthly') {
+        // Repeats every month on the same day
+        const day = triggerDate.getDate();
+        trigger = {
+          type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+          day,
+          hour,
+          minute,
+          repeats: true,
+        };
+      }
+    }
+
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: notificationTitle,
         body: messageConfig.body,
-        data: { reminderId, type, petName },
+        data: { reminderId, type, petName, recurrenceType },
         sound: true,
       },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: Math.floor(trigger / 1000),
-      },
+      trigger,
     });
 
-    console.log('✅ Notification scheduled:', notificationId, 'for', triggerDate.toLocaleString());
+    console.log('✅ Notification scheduled:', notificationId, 'for', triggerDate.toLocaleString(), `(${recurrenceType})`);
     return notificationId;
   } catch (error) {
     console.error('❌ Error scheduling notification:', error);
