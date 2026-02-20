@@ -32,7 +32,22 @@ export default function HomeScreen() {
   const [upcomingReminders, setUpcomingReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const greeting = { title: 'Good Morning', icon: 'weather-sunny' };
+  // Dynamic greeting based on current time
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    
+    if (hour >= 5 && hour < 12) {
+      return { title: 'Good Morning', icon: 'weather-sunny' };
+    } else if (hour >= 12 && hour < 17) {
+      return { title: 'Good Afternoon', icon: 'partly-sunny' };
+    } else if (hour >= 17 && hour < 21) {
+      return { title: 'Good Evening', icon: 'moon' };
+    } else {
+      return { title: 'Good Night', icon: 'moon' };
+    }
+  };
+
+  const greeting = getGreeting();
 
   useEffect(() => {
     if (activePet?.id) {
@@ -52,10 +67,18 @@ export default function HomeScreen() {
   const fetchUpcomingReminders = async () => {
     try {
       setLoading(true);
+      
+      // Check if we have a valid pet ID
+      if (!activePet?.id || activePet.id === 'default') {
+        setUpcomingReminders([]);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('reminders')
         .select('*')
-        .eq('pet_id', activePet?.id)
+        .eq('pet_id', activePet.id)
         .eq('is_active', true)
         .order('next_trigger_at', { ascending: true });
 
@@ -154,6 +177,7 @@ export default function HomeScreen() {
                     pathname: '/activity',
                     params: { 
                       selectedDate: triggerDate.toISOString(),
+                      timestamp: Date.now().toString(), // Force re-render with unique timestamp
                     }
                   });
                 }}
@@ -166,7 +190,7 @@ export default function HomeScreen() {
                 <Text style={[styles.reminderTitle, { color: config.color }]} numberOfLines={1}>
                   {reminder.title}
                 </Text>
-                {reminder.recurrence_type && reminder.recurrence_type !== 'once' && (
+                {reminder.recurrence_type && reminder.recurrence_type !== 'once' && typeof reminder.recurrence_type === 'string' && (
                   <Text style={[styles.reminderSub, { color: config.color }]}>
                     {reminder.recurrence_type.charAt(0).toUpperCase() + reminder.recurrence_type.slice(1)}
                   </Text>

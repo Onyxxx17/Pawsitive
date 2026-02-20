@@ -20,6 +20,7 @@ import {
 } from '@/utils/notifications';
 import ReminderModal, { REMINDER_TYPES } from '@/components/ReminderModal';
 import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 
 type Reminder = {
   id: string;
@@ -58,15 +59,22 @@ export default function ActivityScreen() {
   const { activePet } = usePet();
   const params = useLocalSearchParams();
   
-  // Initialize with selected date from params if available
-  const initialDate = params.selectedDate 
-    ? new Date(params.selectedDate as string) 
-    : new Date();
-  
-  const [selectedDate, setSelectedDate] = useState(initialDate);
-  const [weekStart, setWeekStart] = useState(getWeekStart(initialDate));
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [weekStart, setWeekStart] = useState(getWeekStart(new Date()));
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
+  
+  // Handle navigation with date parameter
+  useFocusEffect(
+    React.useCallback(() => {
+      if (params.selectedDate && params.timestamp) {
+        // Only update if we have both selectedDate and timestamp (coming from home screen)
+        const newDate = new Date(params.selectedDate as string);
+        setSelectedDate(newDate);
+        setWeekStart(getWeekStart(newDate));
+      }
+    }, [params.selectedDate, params.timestamp])
+  );
   
   // Form state
   const [editingId, setEditingId] = useState<string | null>(null);
