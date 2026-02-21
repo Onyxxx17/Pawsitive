@@ -1,10 +1,10 @@
 import sys
 import os
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from ai_features.gemini import process_message, process_image  # Assuming gemini.py has a function to process messages
+import ai_features.gemini as Gemini # Assuming gemini.py has a function to process messages
 
 app = FastAPI()
 
@@ -28,14 +28,14 @@ def index():
 async def chat(message: Message):
     try:
         # Process the user message using the AI logic
-        response = process_message(message.message)
+        response = Gemini.process_message(message.message)
         return {"response": response}
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.post("/analyze")
-async def analyze(photo: UploadFile = File(...)):
+async def analyze(analysisType: str = Form(...), photo: UploadFile = File(...)):
     # Validate file type (optional but recommended)
     if photo.content_type not in ["image/jpeg", "image/png", "image/jpg", "image/webp"]:
         raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, and WebP are supported.")
@@ -50,8 +50,15 @@ async def analyze(photo: UploadFile = File(...)):
         }
 
         # Process the image using the AI logic
-        response = process_image(image_part)
-        return {"response": response}
+        match analysisType:
+            case "poop_analysis":
+                response = Gemini.analyze_pet_poop(image_part)
+            case "body_weight":
+                response = Gemini.analyze_body_weight(image_part)
+            case _:
+                raise HTTPException(status_code=400, detail="Invalid analysis type.")
+        print(response)
+        return response
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
