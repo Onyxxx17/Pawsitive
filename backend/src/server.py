@@ -51,7 +51,6 @@ async def analyze(photo: UploadFile = File(...)):
 
         # Process the image using the AI logic
         response = process_image(image_part)
-        print(response)
         return {"response": response}
     except Exception as e:
         print(e)
