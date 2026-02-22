@@ -26,9 +26,24 @@ export const PetProvider = ({ children }: any) => {
   const [activePet, setActivePet] = useState<Pet>(DEFAULT_PET);
   const [loading, setLoading] = useState(true);
 
-  // 🔄 Fetch pets from Supabase on mount
+  // 🔄 Fetch pets from Supabase on mount and when auth state changes
   useEffect(() => {
     fetchPets();
+
+    // Listen to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        fetchPets();
+      } else if (event === 'SIGNED_OUT') {
+        setPets([]);
+        setActivePet(DEFAULT_PET);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchPets = async () => {

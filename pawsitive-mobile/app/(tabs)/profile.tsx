@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { useUser } from '../../context/UserContext';
+import { usePet } from '../../context/PetContext';
 import { supabase } from '@/lib/supabase';
 
 // ─── Tiny section label 
@@ -75,6 +76,7 @@ const EditableField = ({
 export default function ProfileScreen() {
   const router = useRouter();
   const { profile, loading, updateProfile, uploadAvatar } = useUser();
+  const { fetchPets: refreshPetContext } = usePet();
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -108,7 +110,7 @@ export default function ProfileScreen() {
     }, [])
   );
 
-  // Fetch user's pets
+  // Fetch user's pets (raw database format for editing)
   const fetchPets = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -120,14 +122,12 @@ export default function ProfileScreen() {
 
     if (error) {
       console.error('Error fetching pets:', error);
-      // Show user-friendly message for RLS errors
-      if (error.message.includes('row-level security') || error.message.includes('policy')) {
-        console.log('RLS policy blocking access - owner may need to add SELECT policy for pets table');
-      }
-      setPets([]); // Set empty array if error
+      setPets([]);
     } else if (data) {
       console.log('Fetched pets:', data);
       setPets(data);
+      // Also refresh the global PetContext
+      refreshPetContext();
     }
   };
 

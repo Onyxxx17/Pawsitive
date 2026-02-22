@@ -28,7 +28,7 @@ const REMINDER_TYPE_CONFIG: Record<string, { icon: string; color: string; bgColo
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { activePet } = usePet(); // 👈 Using Dynamic Pet Data
+  const { activePet, loading: petsLoading } = usePet(); // 👈 Using Dynamic Pet Data
   const [upcomingReminders, setUpcomingReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -125,92 +125,115 @@ export default function HomeScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       
-      {/* Dynamic Greeting Card */}
-      <TouchableOpacity style={styles.greetingCard} activeOpacity={0.9}>
-        <View style={styles.greetingTextContainer}>
-          <Text style={styles.greetingTitle}>{greeting.title},</Text>
-          <Text style={styles.ownerName}>{activePet?.name || 'Buddy'} 🐾</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Image source={{ uri: activePet?.avatar }} style={styles.largeAvatar} />
-        </View>
-      </TouchableOpacity>
-
-      {/* Upcoming Section */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Upcoming for {activePet?.name}</Text>
-        <TouchableOpacity onPress={() => router.push('/activity')}><Text style={styles.seeAllText}>Calendar ›</Text></TouchableOpacity>
-      </View>
-
-      {loading ? (
+      {/* Show loading state while pets are being fetched */}
+      {petsLoading ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Loading...</Text>
+          <Text style={styles.emptyText}>Loading your pets...</Text>
         </View>
-      ) : upcomingReminders.length === 0 ? (
-        <TouchableOpacity 
-          style={styles.emptyReminderCard} 
-          onPress={() => router.push('/activity')}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="calendar-outline" size={32} color={Colors.neutral.textLight} />
-          <Text style={styles.emptyTitle}>Nothing to do today</Text>
-          <Text style={styles.emptySub}>Tap to add a reminder</Text>
-        </TouchableOpacity>
-      ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-          {upcomingReminders.map((reminder) => {
-            const config = REMINDER_TYPE_CONFIG[reminder.type] || REMINDER_TYPE_CONFIG.custom;
-            const triggerDate = new Date(reminder.next_trigger_at);
-            const timeStr = triggerDate.toLocaleTimeString('en-US', { 
-              hour: 'numeric', 
-              minute: '2-digit', 
-              hour12: true 
-            });
-            
-            return (
-              <TouchableOpacity
-                key={reminder.id}
-                style={[styles.reminderCard, { backgroundColor: config.bgColor }]}
-                onPress={() => {
-                  // Navigate to activity screen with the specific date
-                  router.push({
-                    pathname: '/activity',
-                    params: { 
-                      selectedDate: triggerDate.toISOString(),
-                      timestamp: Date.now().toString(), // Force re-render with unique timestamp
-                    }
-                  });
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.reminderTop}>
-                  <Ionicons name={config.icon as any} size={20} color={config.color} />
-                  <Text style={[styles.reminderTime, { color: config.color }]}>{timeStr}</Text>
-                </View>
-                <Text style={[styles.reminderTitle, { color: config.color }]} numberOfLines={1}>
-                  {reminder.title}
-                </Text>
-                {reminder.recurrence_type && reminder.recurrence_type !== 'once' && typeof reminder.recurrence_type === 'string' && (
-                  <Text style={[styles.reminderSub, { color: config.color }]}>
-                    {reminder.recurrence_type.charAt(0).toUpperCase() + reminder.recurrence_type.slice(1)}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      )}
-
-      {/* Quick Log */}
-      <Text style={styles.sectionTitle}>Quick Log</Text>
-      <View style={styles.grid}>
-        {[{ icon: 'food-drumstick', label: 'Fed' }, { icon: 'water', label: 'Water' }, { icon: 'walk', label: 'Walk' }, { icon: 'pill', label: 'Meds' }].map((item, index) => (
-          <TouchableOpacity key={index} style={styles.actionBtn} onPress={() => Alert.alert("Logged", `${item.label} recorded for ${activePet?.name}!`)}>
-            <MaterialCommunityIcons name={item.icon as any} size={24} color={Colors.primary.brown} />
-            <Text style={styles.actionLabel}>{item.label}</Text>
+      ) : activePet?.id === 'default' ? (
+        // Show "Add a Pet" state only when loading is done and no pets exist
+        <View style={styles.emptyState}>
+          <Ionicons name="paw" size={80} color={Colors.neutral.textLight} />
+          <Text style={styles.emptyTitle}>No pets yet</Text>
+          <Text style={styles.emptySub}>Add your first pet to get started</Text>
+          <TouchableOpacity 
+            style={styles.addPetButton}
+            onPress={() => router.push('/create-pet')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.addPetButtonText}>Add Pet</Text>
           </TouchableOpacity>
-        ))}
-      </View>
+        </View>
+      ) : (
+        <>
+          {/* Dynamic Greeting Card */}
+          <TouchableOpacity style={styles.greetingCard} activeOpacity={0.9}>
+            <View style={styles.greetingTextContainer}>
+              <Text style={styles.greetingTitle}>{greeting.title},</Text>
+              <Text style={styles.ownerName}>{activePet?.name || 'Buddy'} 🐾</Text>
+            </View>
+            <View style={styles.avatarContainer}>
+              <Image source={{ uri: activePet?.avatar }} style={styles.largeAvatar} />
+            </View>
+          </TouchableOpacity>
+
+          {/* Upcoming Section */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Upcoming for {activePet?.name}</Text>
+            <TouchableOpacity onPress={() => router.push('/activity')}><Text style={styles.seeAllText}>Calendar ›</Text></TouchableOpacity>
+          </View>
+
+          {loading ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>Loading...</Text>
+            </View>
+          ) : upcomingReminders.length === 0 ? (
+            <TouchableOpacity 
+              style={styles.emptyReminderCard} 
+              onPress={() => router.push('/activity')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="calendar-outline" size={32} color={Colors.neutral.textLight} />
+              <Text style={styles.emptyTitle}>Nothing to do today</Text>
+              <Text style={styles.emptySub}>Tap to add a reminder</Text>
+            </TouchableOpacity>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+              {upcomingReminders.map((reminder) => {
+                const config = REMINDER_TYPE_CONFIG[reminder.type] || REMINDER_TYPE_CONFIG.custom;
+                const triggerDate = new Date(reminder.next_trigger_at);
+                const timeStr = triggerDate.toLocaleTimeString('en-US', { 
+                  hour: 'numeric', 
+                  minute: '2-digit', 
+                  hour12: true 
+                });
+                
+                return (
+                  <TouchableOpacity
+                    key={reminder.id}
+                    style={[styles.reminderCard, { backgroundColor: config.bgColor }]}
+                    onPress={() => {
+                      // Navigate to activity screen with the specific date
+                      router.push({
+                        pathname: '/activity',
+                        params: { 
+                          selectedDate: triggerDate.toISOString(),
+                          timestamp: Date.now().toString(), // Force re-render with unique timestamp
+                        }
+                      });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.reminderTop}>
+                      <Ionicons name={config.icon as any} size={20} color={config.color} />
+                      <Text style={[styles.reminderTime, { color: config.color }]}>{timeStr}</Text>
+                    </View>
+                    <Text style={[styles.reminderTitle, { color: config.color }]} numberOfLines={1}>
+                      {reminder.title}
+                    </Text>
+                    {reminder.recurrence_type && reminder.recurrence_type !== 'once' && typeof reminder.recurrence_type === 'string' && (
+                      <Text style={[styles.reminderSub, { color: config.color }]}>
+                        {reminder.recurrence_type.charAt(0).toUpperCase() + reminder.recurrence_type.slice(1)}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {/* Quick Log */}
+          <Text style={styles.sectionTitle}>Quick Log</Text>
+          <View style={styles.grid}>
+            {[{ icon: 'food-drumstick', label: 'Fed' }, { icon: 'water', label: 'Water' }, { icon: 'walk', label: 'Walk' }, { icon: 'pill', label: 'Meds' }].map((item, index) => (
+              <TouchableOpacity key={index} style={styles.actionBtn} onPress={() => Alert.alert("Logged", `${item.label} recorded for ${activePet?.name}!`)}>
+                <MaterialCommunityIcons name={item.icon as any} size={24} color={Colors.primary.brown} />
+                <Text style={styles.actionLabel}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -266,5 +289,17 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     color: Colors.neutral.textLight,
     marginTop: 4,
+  },
+  addPetButton: {
+    backgroundColor: Colors.primary.orangeDark,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    marginTop: 20,
+  },
+  addPetButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
