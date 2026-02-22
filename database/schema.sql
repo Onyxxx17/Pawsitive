@@ -119,9 +119,8 @@ CREATE TABLE reminders (
     user_id                 UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     pet_id                  UUID NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
     title                   VARCHAR(200) NOT NULL,
-    description             TEXT,
     type                    reminder_type NOT NULL,
-    recurrence              JSONB,
+    recurrence_type         JSONB,
     next_trigger_at         TIMESTAMP NOT NULL,
     last_triggered_at       TIMESTAMP,
     is_active               BOOLEAN DEFAULT TRUE,
@@ -131,6 +130,35 @@ CREATE TABLE reminders (
     created_at              TIMESTAMP DEFAULT NOW(),
     updated_at              TIMESTAMP DEFAULT NOW()
 );
+create table public.reminders (
+  id uuid not null default gen_random_uuid (),
+  user_id uuid not null,
+  pet_id uuid not null,
+  title character varying(200) not null,
+  type public.reminder_type not null,
+  recurrence_type jsonb null,
+  next_trigger_at timestamp with time zone null,
+  is_active boolean null default true,
+  created_at timestamp without time zone null default now(),
+  updated_at timestamp without time zone null default now(),
+  is_completed boolean null default false,
+  completed_at timestamp with time zone null,
+  notification_id text null,
+  recurrence_end_date date null,
+  constraint reminders_pkey primary key (id),
+  constraint reminders_pet_id_fkey foreign KEY (pet_id) references pets (id) on delete CASCADE,
+  constraint reminders_user_id_fkey foreign KEY (user_id) references profiles (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_reminders_next_trigger on public.reminders using btree (next_trigger_at) TABLESPACE pg_default
+where
+  (is_active = true);
+
+create index IF not exists idx_reminders_user_id on public.reminders using btree (user_id) TABLESPACE pg_default;
+
+create trigger trg_reminders_updated_at BEFORE
+update on reminders for EACH row
+execute FUNCTION update_updated_at_column ();
 
 -- ============================================================
 -- 7. VETERINARIANS
