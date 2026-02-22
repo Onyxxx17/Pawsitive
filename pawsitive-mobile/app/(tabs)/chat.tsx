@@ -43,8 +43,6 @@ export default function ChatScreen() {
       setIsSending(true);
 
       try {
-        console.log(`${process.env.EXPO_PUBLIC_BACKEND_API_URL}`);
-        console.log(`${process.env.EXPO_PUBLIC_SUPABASE_URL}`);
         const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_API_URL}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -36,6 +36,7 @@ async def chat(message: Message):
     
 @app.post("/analyze")
 async def analyze(analysisType: str = Form(...), photo: UploadFile = File(...)):
+    print("Got it")
     # Validate file type (optional but recommended)
     if photo.content_type not in ["image/jpeg", "image/png", "image/jpg", "image/webp"]:
         raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, and WebP are supported.")
@@ -49,15 +50,17 @@ async def analyze(analysisType: str = Form(...), photo: UploadFile = File(...)):
             "data": contents
         }
 
+        response = Gemini.analyze_pet_photo(image_part, analysisType)
+
         # Process the image using the AI logic
-        match analysisType:
-            case "poop_analysis":
-                response = Gemini.analyze_pet_poop(image_part)
-            case "body_weight":
-                response = Gemini.analyze_body_weight(image_part)
-            case _:
-                raise HTTPException(status_code=400, detail="Invalid analysis type.")
-        print(response)
+        # match analysisType:
+        #     case "poop_analysis":
+        #         response = Gemini.analyze_pet_poop(image_part)
+        #     case "body_weight":
+        #         response = Gemini.analyze_body_weight(image_part)
+        #     case _:
+        #         return HTTPException(status_code=400, detail="Invalid analysis type.")
+        # print(response)
         return response
     except Exception as e:
         print(e)

@@ -14,6 +14,14 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { Colors } from "@/constants/Colors";
 
+const analysisTypes = {
+  mood_analysis: "Mood Analysis",
+  coat_and_body_condition: "Coat and Body Analysis",
+  teeth_and_gums: "Teeth and Gums Analysis",
+  poop_analysis: "Poop Analysis",
+  body_weight: "Body Weight Analysis"
+};
+
 export default function CameraScreen() {
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -126,13 +134,17 @@ export default function CameraScreen() {
           {Object.keys(analysisResult).map((key) => (
             <View key={key} style={{ marginBottom: 10 }}>
               <Text style={styles.resultText}>
-                {key.charAt(0).toUpperCase() + key.slice(1)}: {analysisResult[key]}
+                {key.charAt(0).toUpperCase() + key.slice(1)}:{" "}
+                {analysisResult[key]}
               </Text>
             </View>
           ))}
 
           <TouchableOpacity
-            style={[styles.retryBtn, disableChooseAnother && styles.disabledBtn]}
+            style={[
+              styles.retryBtn,
+              disableChooseAnother && styles.disabledBtn,
+            ]}
             onPress={() => {
               setDisableChooseAnother(true);
               setModalVisible(true);
@@ -212,24 +224,18 @@ export default function CameraScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Analysis Type</Text>
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => {
-                uploadImage(image!, "poop_analysis");
-                setModalVisible(false);
-              }}
-            >
-              <Text style={styles.modalButtonText}>Poop Analysis</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => {
-                uploadImage(image!, "body_weight");
-                setModalVisible(false);
-              }}
-            >
-              <Text style={styles.modalButtonText}>Body Weight Analysis</Text>
-            </TouchableOpacity>
+            {Object.entries(analysisTypes).map(([key, value]) => (
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => {
+                  uploadImage(image!, key);
+                  setModalVisible(false);
+                }}
+                key={key}
+              >
+                <Text style={styles.modalButtonText}>{value}</Text>
+              </TouchableOpacity>
+            ))}
             <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
               onPress={() => {
