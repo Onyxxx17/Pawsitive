@@ -13,6 +13,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { Colors } from "@/constants/Colors";
+import { PhotoUploader } from "@/components/healthAnalysis/PhotoUploader";
+import { AnalysisResult } from "@/components/healthAnalysis/AnalysisResult";
 
 const analysisTypes = {
   mood_analysis: "Mood Analysis",
@@ -23,13 +25,10 @@ const analysisTypes = {
 };
 
 export default function CameraScreen() {
-  const [image, setImage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<Record<string, string>>({});
   const [analysisResult, setAnalysisResult] = useState<any | null>(null);
-  const [disableChooseAnother, setDisableChooseAnother] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // 1. Helper to determine Mime Type from URI
   const getFileInfo = (uri: string) => {
     const fileExtension = uri.split(".").pop()?.toLowerCase();
     let type = "image/jpeg"; // Default
@@ -44,20 +43,15 @@ export default function CameraScreen() {
     };
   };
 
-  // 2. Refactored Upload Logic
-  const uploadImage = async (photoUri: string, analysisType: string) => {
-    if (!analysisType) {
-      Alert.alert("Error", "Please select an analysis type.");
-      return;
-    }
-
+  const uploadImages = async (images: Record<string, string>) => {
     setLoading(true);
     try {
       const formData = new FormData();
-      // Use our helper to format the photo object
-      const filePayload = getFileInfo(photoUri) as any;
-      formData.append("photo", filePayload);
-      formData.append("analysisType", analysisType);
+      Object.entries(images).forEach(([analysisType, uri]) => {
+        const filePayload = getFileInfo(uri) as any;
+        formData.append("photos", filePayload);
+        formData.append("analysisTypes", analysisType);
+      });
 
       const response = await fetch(
         `${process.env.EXPO_PUBLIC_BACKEND_API_URL}/analyze`,
@@ -74,181 +68,49 @@ export default function CameraScreen() {
       if (response.ok) {
         setAnalysisResult(data);
       } else {
-        Alert.alert("Error", data.response || "Failed to analyze the photo.");
+        Alert.alert("Error", data.response || "Failed to analyze the photos.");
       }
     } catch (error) {
       console.error(error);
-      Alert.alert("Error", "An error occurred while sending the photo.");
+      Alert.alert("Error", "An error occurred while sending the photos.");
     } finally {
       setLoading(false);
-      setDisableChooseAnother(false);
-    }
-  };
-
-  // 3. Launch Camera
-  const openCamera = async () => {
-    const { granted } = await ImagePicker.requestCameraPermissionsAsync();
-    if (!granted) {
-      Alert.alert("Permission Required", "Camera access is needed.");
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"], // Supports jpeg, png, etc.
-      allowsEditing: true,
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-      setModalVisible(true);
-    }
-  };
-
-  // 4. Launch Gallery (Supports PNG, WEBP, JPEG)
-  const pickImage = async () => {
-    const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!granted) {
-      Alert.alert("Permission Required", "Gallery access is needed.");
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-      setModalVisible(true);
     }
   };
 
   return (
-    <View style={styles.container}>
-      {image && analysisResult ? (
-        <ScrollView contentContainerStyle={styles.resultContainer}>
-          <Image source={{ uri: image }} style={styles.resultImage} />
-          <Text style={styles.resultTitle}>Analysis Result</Text>
-          {Object.keys(analysisResult).map((key) => (
-            <View key={key} style={{ marginBottom: 10 }}>
-              <Text style={styles.resultText}>
-                {key.charAt(0).toUpperCase() + key.slice(1)}:{" "}
-                {analysisResult[key]}
-              </Text>
-            </View>
-          ))}
-
-          <TouchableOpacity
-            style={[
-              styles.retryBtn,
-              disableChooseAnother && styles.disabledBtn,
-            ]}
-            onPress={() => {
-              setDisableChooseAnother(true);
-              setModalVisible(true);
-            }}
-            disabled={disableChooseAnother}
-          >
-            {disableChooseAnother ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={{ color: "#fff" }}>Choose Another Analysis</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.retryBtn}
-            onPress={() => {
-              setImage(null);
-              setAnalysisResult(null);
-            }}
-          >
-            <Text style={{ color: "#fff" }}>Use Another Photo</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      ) : image ? (
-        <View style={styles.previewContainer}>
-          <Image source={{ uri: image }} style={styles.preview} />
-          {loading ? (
-            <ActivityIndicator
-              size="large"
-              color={Colors.primary.brown}
-              style={{ marginTop: 20 }}
-            />
-          ) : (
-            <TouchableOpacity
-              onPress={() => setImage(null)}
-              style={styles.retryBtn}
-            >
-              <Text style={{ color: "#fff" }}>Scan Another</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+    <ScrollView style={styles.container}>
+      {!analysisResult ? (
+        <PhotoUploader
+          onAllImagesSelected={(images) => {
+            setUploadedImages(images);
+            uploadImages(images);
+          }}
+          loading={loading}
+          setLoading={setLoading}
+          uploadedImages={uploadedImages}
+          setUploadedImages={setUploadedImages}
+        />
       ) : (
-        <View style={styles.emptyState}>
-          <Ionicons
-            name="scan-circle"
-            size={100}
-            color={Colors.primary.orangeDark}
-          />
-          <Text style={styles.title}>AI Health Scan</Text>
-          <Text style={styles.subtitle}>
-            Take a photo or upload one for an instant check.
-          </Text>
-
-          <TouchableOpacity style={styles.btn} onPress={openCamera}>
-            <Ionicons name="camera" size={24} color="#fff" />
-            <Text style={styles.btnText}>Take Photo</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.btn, styles.secondaryBtn]}
-            onPress={pickImage}
-          >
-            <Ionicons name="images" size={24} color="#fff" />
-            <Text style={styles.btnText}>Upload from Gallery</Text>
-          </TouchableOpacity>
-        </View>
+        <AnalysisResult 
+          analysisResult={analysisResult} 
+          onRescan={() => {
+            setAnalysisResult(null);
+            setUploadedImages({});
+            setLoading(false);
+          }}
+          uploadedImages={uploadedImages}
+         />
       )}
 
-      <Modal
-        visible={modalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => {
-          setModalVisible(false);
-        }}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Analysis Type</Text>
-            {Object.entries(analysisTypes).map(([key, value]) => (
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => {
-                  uploadImage(image!, key);
-                  setModalVisible(false);
-                }}
-                key={key}
-              >
-                <Text style={styles.modalButtonText}>{value}</Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity
-              style={[styles.modalButton, styles.cancelButton]}
-              onPress={() => {
-                setModalVisible(false);
-                setDisableChooseAnother(false);
-              }}
-            >
-              <Text style={styles.modalButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </View>
+      {loading && (
+        <ActivityIndicator
+          size="large"
+          color={Colors.primary.brown}
+          style={{ marginTop: 20 }}
+        />
+      )}
+    </ScrollView>
   );
 }
 
@@ -354,5 +216,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 20,
     textAlign: "center",
+  },
+  resultHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+  },
+  resultContent: {
+    flexGrow: 1,
+    alignItems: "center",
+    padding: 20,
   },
 });

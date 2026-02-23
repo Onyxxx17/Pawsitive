@@ -27,12 +27,22 @@ def analyze_pet_photo(image_parts, prompt_key):
             mime_type=image_parts['mime_type']
         )
     system_instruction = SYSTEM_PROMPTS[prompt_key]
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[image, system_instruction],
-        config=types.GenerateContentConfig(system_instruction=system_instruction)
-    )
-    return format_json(response.text)
+
+    # List of models to try in order of preference
+    models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3-pro-preview"]
+
+    for model in models:
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=[image, system_instruction],
+                config=types.GenerateContentConfig(system_instruction=system_instruction)
+            )
+            return format_json(response.text)  # Return result if successful
+        except Exception as e:
+            print(f"Model {model} failed with error: {e}")
+
+    raise RuntimeError("All models failed to process the request.")
 
 def analyze_pet_poop(image_parts):
     result = analyze_pet_photo(image_parts, "poop_analysis")

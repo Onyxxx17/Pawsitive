@@ -7,8 +7,8 @@ import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(process.env.EXPO_PUBLIC_DEV_LOGIN_EMAIL?? "");
+  const [password, setPassword] = useState(process.env.EXPO_PUBLIC_DEV_LOGIN_PW?? "");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
