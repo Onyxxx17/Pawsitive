@@ -54,6 +54,15 @@ export default function VetTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="availability"
+        options={{
+          title: 'Availability',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="time" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',

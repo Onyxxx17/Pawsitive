@@ -194,10 +194,13 @@ CREATE TABLE vet_availability (
     day_of_week             INTEGER NOT NULL CHECK (day_of_week >= 0 AND day_of_week <= 6),
     start_time              TIME NOT NULL,
     end_time                TIME NOT NULL,
-    slot_duration_min       INTEGER DEFAULT 30,
+    slot_duration_min       INTEGER DEFAULT 30 CHECK (slot_duration_min IN (15, 30, 60)),
     is_active               BOOLEAN DEFAULT TRUE,
+    created_at              TIMESTAMP DEFAULT NOW(),
+    updated_at              TIMESTAMP DEFAULT NOW(),
 
-    CONSTRAINT chk_time_range CHECK (start_time < end_time)
+    CONSTRAINT chk_time_range CHECK (start_time < end_time),
+    CONSTRAINT unique_vet_day UNIQUE (vet_id, day_of_week)
 );
 
 -- ============================================================
@@ -259,6 +262,7 @@ CREATE INDEX idx_reminders_next_trigger ON reminders(next_trigger_at) WHERE is_a
 CREATE INDEX idx_reminders_user_id ON reminders(user_id);
 
 CREATE INDEX idx_vet_availability_vet_id ON vet_availability(vet_id);
+CREATE INDEX idx_vet_availability_day ON vet_availability(vet_id, day_of_week);
 CREATE INDEX idx_appointments_user_id ON appointments(user_id);
 CREATE INDEX idx_appointments_vet_id ON appointments(vet_id);
 CREATE INDEX idx_appointments_scheduled ON appointments(scheduled_at, status);
