@@ -7,16 +7,18 @@ interface ButtonProps {
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'outline';
   style?: object;
+  disabled?: boolean; // Added disabled prop
 }
 
-export default function Button({ title, onPress, variant = 'primary', style }: ButtonProps) {
+export default function Button({ title, onPress, variant = 'primary', style, disabled = false }: ButtonProps) {
   return (
     <TouchableOpacity 
-      style={[styles.button, styles[variant], style]} 
+      style={[styles.button, styles[variant], disabled && styles.disabled, style]} 
       onPress={onPress}
       activeOpacity={0.8}
+      disabled={disabled} // Pass disabled to TouchableOpacity
     >
-      <Text style={styles.text}>{title}</Text>
+      <Text style={[styles.text, disabled && styles.disabledText]}>{title}</Text>
     </TouchableOpacity>
   );
 }
@@ -45,5 +47,11 @@ const styles = StyleSheet.create({
     color: Colors.primary.orange,
     fontSize: 16,
     fontWeight: '600',
+  },
+  disabled: {
+    backgroundColor: Colors.neutral.disabled, // Greyed-out background for disabled state
+  },
+  disabledText: {
+    color: Colors.neutral.textDisabled, // Greyed-out text for disabled state
   },
 });

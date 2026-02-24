@@ -11,6 +11,8 @@ export const Colors = {
     textLight: '#8B7D72',
     border: '#E8E3DF',
     overlay: 'rgba(255,255,255,0.9)',
+    disabled: '#FDD2B2',
+    textDisabled: '#FDFAF7'
   },
   health: {
     excellent: '#4CAF50',

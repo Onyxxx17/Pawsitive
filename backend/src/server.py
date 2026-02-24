@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import ai_features.gemini as Gemini # Assuming gemini.py has a function to process messages
+from typing import List
 
 app = FastAPI()
 
@@ -35,33 +36,33 @@ async def chat(message: Message):
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.post("/analyze")
-async def analyze(analysisType: str = Form(...), photo: UploadFile = File(...)):
-    print("Got it")
-    # Validate file type (optional but recommended)
-    if photo.content_type not in ["image/jpeg", "image/png", "image/jpg", "image/webp"]:
-        raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, and WebP are supported.")
-    
-    try:
-        # Read the uploaded file
-        contents = await photo.read()
+async def analyze(analysisTypes: List[str] = Form(...), photos: List[UploadFile] = File(...)):
+    if len(analysisTypes) != len(photos):
+        raise HTTPException(status_code=400, detail="Mismatch between analysis types and photos.")
 
-        image_part = {
-            "mime_type": photo.content_type,
-            "data": contents
-        }
+    results = []
 
-        response = Gemini.analyze_pet_photo(image_part, analysisType)
+    for analysisType, photo in zip(analysisTypes, photos):
+        print(f"Analyzing {analysisType}")
+        # Validate file type (optional but recommended)
+        if photo.content_type not in ["image/jpeg", "image/png", "image/jpg", "image/webp"]:
+            raise HTTPException(status_code=400, detail=f"Invalid file type for {photo.filename}. Only JPEG, PNG, and WebP are supported.")
 
-        # Process the image using the AI logic
-        # match analysisType:
-        #     case "poop_analysis":
-        #         response = Gemini.analyze_pet_poop(image_part)
-        #     case "body_weight":
-        #         response = Gemini.analyze_body_weight(image_part)
-        #     case _:
-        #         return HTTPException(status_code=400, detail="Invalid analysis type.")
-        # print(response)
-        return response
-    except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail=str(e))
+        try:
+            # Read the uploaded file
+            contents = await photo.read()
+
+            image_part = {
+                "mime_type": photo.content_type,
+                "data": contents
+            }
+
+            # Process the image using the AI logic
+            response = Gemini.analyze_pet_photo(image_part, analysisType)
+            # response = {"field": "VALUE"} # debug usage
+            results.append({"analysisType": analysisType, "result": response})
+        except Exception as e:
+            print(e)
+            raise HTTPException(status_code=500, detail=f"Error processing {photo.filename}: {str(e)}")
+    print(results)
+    return {"results": results}
