@@ -33,7 +33,7 @@ export default function OnboardingScreen() {
         )}
       />
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.btn} onPress={() => router.replace('/login')}>
+        <TouchableOpacity style={styles.btn} onPress={() => router.replace('/landing')}>
           <Text style={styles.btnText}>Get Started</Text>
         </TouchableOpacity>
       </View>
