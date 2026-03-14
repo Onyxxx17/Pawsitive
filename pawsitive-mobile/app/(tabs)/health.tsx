@@ -1,13 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Modal } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
 import { usePet } from '@/context/PetContext';
 
-const Card = ({ children, style }: any) => (
-  <View style={[styles.card, style]}>{children}</View>
-);
+const Card = ({ children, style }: any) => <View style={[styles.card, style]}>{children}</View>;
 
 type HealthCheck = {
   id: string;
@@ -50,11 +48,9 @@ export default function HealthScreen() {
 
     setLoading(true);
     try {
-      // Calculate date 3 days ago
       const threeDaysAgo = new Date();
       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-      
-      // Fetch health checks from last 3 days only
+
       const { data: checksData, error: checksError } = await supabase
         .from('health_checks')
         .select('*')
@@ -63,7 +59,6 @@ export default function HealthScreen() {
         .gte('created_at', threeDaysAgo.toISOString())
         .order('created_at', { ascending: false });
 
-      // Fetch recent health logs
       const { data: logsData, error: logsError } = await supabase
         .from('health_logs')
         .select('*')
@@ -71,7 +66,6 @@ export default function HealthScreen() {
         .order('logged_at', { ascending: false })
         .limit(20);
 
-      // Fetch active veterinarians
       const { data: vetsData, error: vetsError } = await supabase
         .from('veterinarians')
         .select('*')
@@ -83,11 +77,11 @@ export default function HealthScreen() {
       if (!logsError && logsData) setHealthLogs(logsData);
       if (!vetsError && vetsData) setVeterinarians(vetsData);
 
-      // Check if we have any real data
-      const hasData = (checksData && checksData.length > 0) || 
-                      (logsData && logsData.length > 0) ||
-                      (vetsData && vetsData.length > 0);
-      
+      const hasData =
+        (checksData && checksData.length > 0) ||
+        (logsData && logsData.length > 0) ||
+        (vetsData && vetsData.length > 0);
+
       setUsingMockData(!hasData);
     } catch (error) {
       console.error('Error fetching health data:', error);
@@ -106,40 +100,22 @@ export default function HealthScreen() {
     }
   }, [activePet?.id, fetchHealthData]);
 
-  const getOverallScore = () => {
-    if (healthChecks.length === 0) return 92; // Mock score
-    
-    const validScores = healthChecks.filter(c => c.score != null).map(c => c.score);
+  const overallScore = useMemo(() => {
+    if (healthChecks.length === 0) return 92;
+    const validScores = healthChecks.filter((c) => c.score != null).map((c) => c.score);
     if (validScores.length === 0) return 92;
-    
-    const avgScore = validScores.reduce((sum, score) => sum + score, 0) / validScores.length;
-    return Math.round(avgScore);
-  };
+    return Math.round(validScores.reduce((sum, score) => sum + score, 0) / validScores.length);
+  }, [healthChecks]);
 
-  const getHealthStatus = (score: number) => {
-    if (score >= 90) return { title: 'Excellent Condition', color: Colors.health.excellent };
-    if (score >= 75) return { title: 'Good Condition', color: Colors.health.good };
-    if (score >= 60) return { title: 'Fair Condition', color: Colors.health.fair };
-    return { title: 'Needs Attention', color: Colors.health.poor };
-  };
+  const healthStatus = useMemo(() => {
+    if (overallScore >= 90) return { title: 'Looking strong', color: Colors.health.excellent };
+    if (overallScore >= 75) return { title: 'Generally steady', color: Colors.health.good };
+    if (overallScore >= 60) return { title: 'Worth checking', color: Colors.health.fair };
+    return { title: 'Needs closer attention', color: Colors.health.poor };
+  }, [overallScore]);
 
-  const getLatestWeight = () => {
-    const weightLog = healthLogs.find(log => 
-      log.log_type === 'biological' && log.log_data?.weight
-    );
-    return weightLog?.log_data?.weight || activePet?.weight_kg || '5.2';
-  };
-
-  const getLatestActivity = () => {
-    const activityLog = healthLogs.find(log => log.log_type === 'activity');
-    return activityLog?.log_data?.duration_minutes || '12';
-  };
-
-  const getCurrentVet = () => {
-    if (veterinarians.length > 0) {
-      return veterinarians[0];
-    }
-    // Mock vet data
+  const currentVet = useMemo(() => {
+    if (veterinarians.length > 0) return veterinarians[0];
     return {
       id: 'mock',
       name: 'Dr. Sarah Smith',
@@ -150,352 +126,333 @@ export default function HealthScreen() {
       total_reviews: 120,
       consultation_fee: 25,
     };
-  };
+  }, [veterinarians]);
 
-  const getCheckIcon = (checkType: string) => {
-    const icons: { [key: string]: string } = {
-      coat: 'paw',
-      fit: 'fitness',
-      teeth: 'happy',
-      poop: 'water',
-      face: 'eye',
+  const latestWeightLog = useMemo(
+    () => healthLogs.find((log) => log.log_type === 'biological' && log.log_data?.weight),
+    [healthLogs],
+  );
+
+  const latestActivityLog = useMemo(
+    () => healthLogs.find((log) => log.log_type === 'activity'),
+    [healthLogs],
+  );
+
+  const latestDietLog = useMemo(
+    () => healthLogs.find((log) => log.log_type === 'diet'),
+    [healthLogs],
+  );
+
+  const careStats = useMemo(
+    () => [
+      {
+        id: 'weight',
+        icon: 'weight',
+        title: 'Latest weight record',
+        value: latestWeightLog?.log_data?.weight
+          ? `${latestWeightLog.log_data.weight} kg`
+          : activePet?.weight || 'Not logged',
+        note: latestWeightLog
+          ? `Logged ${new Date(latestWeightLog.logged_at).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            })}`
+          : 'No saved weight record yet',
+        tint: '#E8F1FF',
+      },
+      {
+        id: 'activity',
+        icon: 'run',
+        title: 'Latest activity record',
+        value: latestActivityLog?.log_data?.duration_minutes
+          ? `${latestActivityLog.log_data.duration_minutes} min`
+          : 'Not logged',
+        note: latestActivityLog ? 'Pulled from the latest saved activity entry' : 'No saved activity record yet',
+        tint: '#E8F6EE',
+      },
+      {
+        id: 'diet',
+        icon: 'restaurant-outline',
+        title: 'Latest diet record',
+        value: latestDietLog?.log_data?.meal_type || latestDietLog?.log_data?.notes || 'No recent entry',
+        note: latestDietLog ? 'Pulled from the latest saved diet entry' : 'No saved diet record yet',
+        tint: '#FFF1E3',
+      },
+    ],
+    [activePet?.weight, latestActivityLog, latestDietLog, latestWeightLog],
+  );
+
+  const checksByType = useMemo(() => {
+    const labels: Record<string, { label: string; icon: string }> = {
+      coat: { label: 'Coat and skin', icon: 'paw' },
+      fit: { label: 'Body condition', icon: 'fitness' },
+      teeth: { label: 'Teeth and gums', icon: 'happy' },
+      poop: { label: 'Digestive check', icon: 'water' },
+      face: { label: 'Mood and alertness', icon: 'eye' },
     };
-    return icons[checkType] || 'medical';
-  };
 
-  const getCheckLabel = (checkType: string) => {
-    const labels: { [key: string]: string } = {
-      coat: 'Coat Health',
-      fit: 'Body Condition',
-      teeth: 'Dental Health',
-      poop: 'Digestive Health',
-      face: 'Mood & Alertness',
-    };
-    return labels[checkType] || checkType;
-  };
-
-  const getChecksByType = () => {
-    const types = ['coat', 'fit', 'teeth', 'poop', 'face'];
-    
-    return types.map(type => {
-      const checks = healthChecks.filter(c => c.check_type === type);
-      
-      if (checks.length === 0) {
-        return {
-          type,
-          label: getCheckLabel(type),
-          icon: getCheckIcon(type),
-          check: null,
-          allChecks: [],
-          checkCount: 0,
-        };
-      }
-      
-      // Get latest check for date/details
-      const latestCheck = checks[0];
-      
+    return ['coat', 'fit', 'teeth', 'poop', 'face'].map((type) => {
+      const checks = healthChecks.filter((c) => c.check_type === type);
       return {
         type,
-        label: getCheckLabel(type),
-        icon: getCheckIcon(type),
-        check: latestCheck,
-        allChecks: checks, // Last 3 days of checks
+        label: labels[type]?.label || type,
+        icon: labels[type]?.icon || 'medical',
+        check: checks[0] || null,
         checkCount: checks.length,
       };
     });
-  };
-  
+  }, [healthChecks]);
+
+  const recentChecks = checksByType.filter((item) => item.check).slice(0, 3);
+
   const handleCallVet = () => {
-    Alert.alert("Connecting...", "Starting video call with Dr. Sarah Smith");
+    Alert.alert('Connecting...', `Starting video call with ${currentVet.name}`);
   };
 
   if (loading) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[styles.container, styles.loadingState]}>
         <ActivityIndicator size="large" color={Colors.primary.orangeDark} />
         <Text style={styles.loadingText}>Loading health data...</Text>
       </View>
     );
   }
 
-  const overallScore = getOverallScore();
-  const healthStatus = getHealthStatus(overallScore);
-  const currentVet = getCurrentVet();
-
   return (
     <View style={styles.container}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={{ paddingBottom: 120 }} 
-        showsVerticalScrollIndicator={false}
-      >
-      
-      {/* Mock Data Banner */}
-      {usingMockData && (
-        <View style={styles.mockDataBanner}>
-          <Ionicons name="information-circle" size={20} color={Colors.primary.orangeDark} />
-          <Text style={styles.mockDataText}>No data found. Mock data shown</Text>
-        </View>
-      )}
-      
-      {/* 1. Header */}
-      <View style={styles.headerSection}>
-        <Text style={styles.pageTitle}>Health Overview</Text>
-        <Text style={styles.lastUpdate}>
-          Last updated: {new Date().toLocaleString('en-US', { 
-            month: 'short', 
-            day: 'numeric', 
-            hour: 'numeric', 
-            minute: '2-digit' 
-          })}
-        </Text>
-      </View>
-
-      {/* 2. Clean Score Card (No Border Frame) */}
-      <Card style={styles.scoreCard}>
-        <View style={styles.scoreLeft}>
-          <View style={[styles.scoreRing, { borderColor: healthStatus.color }]}>
-            <Text style={styles.scoreText}>{overallScore}</Text>
-            <Text style={styles.scoreSub}>/100</Text>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {usingMockData ? (
+          <View style={styles.mockDataBanner}>
+            <Ionicons name="information-circle" size={20} color={Colors.primary.orangeDark} />
+            <Text style={styles.mockDataText}>Showing placeholder data until real health logs arrive.</Text>
           </View>
-        </View>
-        <View style={styles.scoreRight}>
-          <Text style={styles.statusTitle}>{healthStatus.title}</Text>
-          <Text style={styles.statusDesc}>
-            {`${activePet?.name || 'Your pet'}'s vitals are ${overallScore >= 90 ? 'stable' : 'being monitored'}.`}
-            {overallScore >= 90 ? ' Keep up the hydration and daily walks!' : ' Consider scheduling a check-up.'}
+        ) : null}
+
+        <View style={styles.headerSection}>
+          <Text style={styles.pageTitle}>Health & care</Text>
+          <Text style={styles.lastUpdate}>
+            Updated {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
           </Text>
-          <TouchableOpacity 
-            style={styles.detailBtn} 
-            onPress={() => {
-              console.log('View Report pressed');
-              setReportModalVisible(true);
-            }}
-          >
-            <Text style={styles.detailBtnText}>View Report</Text>
-          </TouchableOpacity>
         </View>
-      </Card>
 
-      {/* 3. Vitals Grid */}
-      <Text style={styles.sectionTitle}>Vitals</Text>
-      <View style={styles.grid}>
-        <Card style={styles.vitalCard}>
-          <View style={[styles.iconCircle, { backgroundColor: '#E3F2FD' }]}>
-            <MaterialCommunityIcons name="weight" size={24} color="#2196F3" />
-          </View>
-          <Text style={styles.vitalValue}>{getLatestWeight()} kg</Text>
-          <Text style={styles.vitalLabel}>Weight</Text>
-        </Card>
-
-        <Card style={styles.vitalCard}>
-          <View style={[styles.iconCircle, { backgroundColor: '#FFEBEE' }]}>
-            <MaterialCommunityIcons name="heart-pulse" size={24} color="#F44336" />
-          </View>
-          <Text style={styles.vitalValue}>80 bpm</Text>
-          <Text style={styles.vitalLabel}>Heart Rate</Text>
-        </Card>
-
-        <Card style={styles.vitalCard}>
-          <View style={[styles.iconCircle, { backgroundColor: '#E8F5E9' }]}>
-            <MaterialCommunityIcons name="thermometer" size={24} color="#4CAF50" />
-          </View>
-          <Text style={styles.vitalValue}>38.5°C</Text>
-          <Text style={styles.vitalLabel}>Temp</Text>
-        </Card>
-
-        <Card style={styles.vitalCard}>
-          <View style={[styles.iconCircle, { backgroundColor: '#FFF3E0' }]}>
-            <MaterialCommunityIcons name="sleep" size={24} color="#FF9800" />
-          </View>
-          <Text style={styles.vitalValue}>{getLatestActivity()}h</Text>
-          <Text style={styles.vitalLabel}>Activity</Text>
-        </Card>
-      </View>
-
-      {/* 4. Tele-Vet Section */}
-      <Text style={styles.sectionTitle}>Tele-Vet</Text>
-      <Card style={styles.vetCard}>
-        <View style={styles.vetHeader}>
-          <Image 
-            source={{ uri: currentVet.profile_photo_url }} 
-            style={styles.vetAvatar} 
-          />
-          <View style={styles.vetInfo}>
-            <Text style={styles.vetName}>{currentVet.name}</Text>
-            <Text style={styles.vetSpec}>
-              {currentVet.specializations?.[0] || 'Veterinarian'} • Available
-            </Text>
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={14} color="#FFD700" />
-              <Text style={styles.ratingText}>
-                {currentVet.rating.toFixed(1)} ({currentVet.total_reviews} reviews)
-              </Text>
+        <Card style={styles.heroCard}>
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroBadge}>
+              <Ionicons name="shield-checkmark-outline" size={16} color={Colors.primary.brown} />
+              <Text style={styles.heroBadgeText}>Health snapshot</Text>
             </View>
-          </View>
-        </View>
-
-        <View style={styles.vetActions}>
-          <TouchableOpacity style={styles.callButton} onPress={handleCallVet}>
-            <Ionicons name="videocam" size={20} color="#fff" />
-            <Text style={styles.callBtnText}>Video Call (${currentVet.consultation_fee})</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.chatButton}>
-            <Ionicons name="chatbubble-ellipses" size={20} color={Colors.primary.brown} />
-          </TouchableOpacity>
-        </View>
-      </Card>
-    </ScrollView>
-
-    {/* Health Report Modal */}
-    <Modal
-      visible={reportModalVisible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setReportModalVisible(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <TouchableOpacity 
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => setReportModalVisible(false)}
-        />
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Health Report</Text>
-            <TouchableOpacity onPress={() => setReportModalVisible(false)}>
-              <Ionicons name="close" size={28} color={Colors.primary.brown} />
+            <TouchableOpacity style={styles.reportButton} onPress={() => setReportModalVisible(true)}>
+              <Text style={styles.reportButtonText}>Full report</Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView 
-            showsVerticalScrollIndicator={true} 
-            style={styles.modalScroll}
-            contentContainerStyle={{ paddingBottom: 20 }}
-          >
-              {usingMockData && (
-                <View style={styles.mockDataBanner}>
-                  <Ionicons name="information-circle" size={20} color={Colors.primary.orangeDark} />
-                  <Text style={styles.mockDataText}>No data found. Mock data shown</Text>
-                </View>
-              )}
+          <View style={styles.heroMainRow}>
+            <View style={styles.scoreRingWrap}>
+              <View style={[styles.scoreRing, { borderColor: healthStatus.color }]}>
+                <Text style={styles.scoreText}>{overallScore}</Text>
+                <Text style={styles.scoreSub}>/100</Text>
+              </View>
+            </View>
+            <View style={styles.heroCopy}>
+              <Text style={styles.statusTitle}>{healthStatus.title}</Text>
+              <Text style={styles.statusDesc}>
+                {activePet?.name || 'Your pet'}&apos;s score is based on recent checks and care logs, not live medical readings.
+              </Text>
+              <Text style={styles.statusSupport}>
+                Use this page to review saved check results and decide whether a vet consult is worth scheduling.
+              </Text>
+            </View>
+          </View>
+        </Card>
 
-              {getChecksByType().map((item, index) => {
+        <Text style={styles.sectionTitle}>Talk to a vet fast</Text>
+        <Card style={styles.teleVetCard}>
+          <View style={styles.teleVetTop}>
+            <View style={styles.teleVetCopy}>
+              <Text style={styles.teleVetTitle}>Tele-vet support</Text>
+              <Text style={styles.teleVetSubtitle}>
+                Get quick guidance when a check looks off or you want reassurance from a professional.
+              </Text>
+            </View>
+            <Image source={{ uri: currentVet.profile_photo_url }} style={styles.vetAvatar} />
+          </View>
+
+          <View style={styles.vetMetaRow}>
+            <View style={styles.vetMetaItem}>
+              <Text style={styles.vetName}>{currentVet.name}</Text>
+              <Text style={styles.vetSpec}>{currentVet.specializations?.[0] || 'Veterinarian'}</Text>
+            </View>
+            <View style={styles.vetMetaItem}>
+              <Text style={styles.vetFee}>${currentVet.consultation_fee}</Text>
+              <Text style={styles.vetFeeLabel}>per video consult</Text>
+            </View>
+          </View>
+
+          <View style={styles.ratingRow}>
+            <Ionicons name="star" size={14} color="#FFD700" />
+            <Text style={styles.ratingText}>
+              {currentVet.rating.toFixed(1)} rating • {currentVet.total_reviews} reviews
+            </Text>
+          </View>
+
+          <View style={styles.vetActions}>
+            <TouchableOpacity style={styles.callButton} onPress={handleCallVet}>
+              <Ionicons name="videocam-outline" size={18} color="#FFF" />
+              <Text style={styles.callBtnText}>Start video consult</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryVetButton}>
+              <Ionicons name="chatbubble-ellipses-outline" size={18} color={Colors.primary.brown} />
+            </TouchableOpacity>
+          </View>
+        </Card>
+
+        <Text style={styles.sectionTitle}>Available health records</Text>
+        <View style={styles.statsGrid}>
+          {careStats.map((stat) => (
+            <Card key={stat.id} style={styles.statCard}>
+              <View style={[styles.statIconWrap, { backgroundColor: stat.tint }]}>
+                <MaterialCommunityIcons name={stat.icon as any} size={22} color={Colors.primary.brown} />
+              </View>
+              <Text style={styles.statTitle}>{stat.title}</Text>
+              <Text style={styles.statValue}>{stat.value}</Text>
+              <Text style={styles.statNote}>{stat.note}</Text>
+            </Card>
+          ))}
+        </View>
+
+        <Text style={styles.sectionTitle}>Recent health checks</Text>
+        {recentChecks.length > 0 ? (
+          recentChecks.map((item) => {
+            const score = item.check?.score || 0;
+            return (
+              <Card key={item.type} style={styles.checkCard}>
+                <View style={styles.checkHeader}>
+                  <View style={styles.checkLeft}>
+                    <View style={styles.checkIconWrap}>
+                      <Ionicons name={item.icon as any} size={20} color={Colors.primary.orangeDark} />
+                    </View>
+                    <View style={styles.checkCopy}>
+                      <Text style={styles.checkTitle}>{item.label}</Text>
+                      <Text style={styles.checkMeta}>
+                        {new Date(item.check!.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}
+                        {item.checkCount > 1 ? ` • ${item.checkCount} recent checks` : ''}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text
+                    style={[
+                      styles.checkScore,
+                      {
+                        color:
+                          score >= 90
+                            ? Colors.health.excellent
+                            : score >= 75
+                              ? Colors.health.good
+                              : score >= 60
+                                ? Colors.health.fair
+                                : Colors.health.poor,
+                      },
+                    ]}
+                  >
+                    {Math.round(score)}
+                  </Text>
+                </View>
+              </Card>
+            );
+          })
+        ) : (
+          <Card style={styles.emptyCard}>
+            <Text style={styles.emptyCardTitle}>No recent checks yet</Text>
+            <Text style={styles.emptyCardText}>
+              Use the camera scan flow to start building a health history for {activePet?.name || 'your pet'}.
+            </Text>
+          </Card>
+        )}
+      </ScrollView>
+
+      <Modal
+        visible={reportModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setReportModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setReportModalVisible(false)} />
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Health report</Text>
+              <TouchableOpacity onPress={() => setReportModalVisible(false)}>
+                <Ionicons name="close" size={28} color={Colors.primary.brown} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 20 }}>
+              {checksByType.map((item) => {
                 const score = item.check?.score || 0;
                 const hasData = item.check !== null;
-                
+
                 return (
                   <View key={item.type} style={styles.reportCard}>
                     <View style={styles.reportHeader}>
                       <View style={styles.reportIconContainer}>
-                        <Ionicons 
-                          name={item.icon as any} 
-                          size={24} 
-                          color={Colors.primary.orangeDark} 
-                        />
+                        <Ionicons name={item.icon as any} size={22} color={Colors.primary.orangeDark} />
                       </View>
                       <View style={styles.reportInfo}>
                         <Text style={styles.reportLabel}>{item.label}</Text>
-                        {hasData && item.check && (
-                          <>
-                            <Text style={styles.reportDate}>
-                              Latest: {new Date(item.check.created_at).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: 'numeric',
-                                minute: '2-digit'
-                              })}
-                            </Text>
-                            {item.checkCount > 1 && (
-                              <Text style={styles.reportCheckCount}>
-                                Last 3 days ({item.checkCount} checks)
-                              </Text>
-                            )}
-                          </>
-                        )}
+                        {hasData ? (
+                          <Text style={styles.reportDate}>
+                            Latest:{' '}
+                            {new Date(item.check!.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </Text>
+                        ) : null}
                       </View>
                       <View style={styles.reportScore}>
-                        <Text style={[
-                          styles.reportScoreText,
-                          { color: score >= 90 ? Colors.health.excellent : 
-                                   score >= 75 ? Colors.health.good : 
-                                   score >= 60 ? Colors.health.fair : Colors.health.poor }
-                        ]}>
+                        <Text
+                          style={[
+                            styles.reportScoreText,
+                            {
+                              color:
+                                score >= 90
+                                  ? Colors.health.excellent
+                                  : score >= 75
+                                    ? Colors.health.good
+                                    : score >= 60
+                                      ? Colors.health.fair
+                                      : Colors.health.poor,
+                            },
+                          ]}
+                        >
                           {hasData ? Math.round(score) : '--'}
                         </Text>
                         <Text style={styles.reportScoreSub}>/100</Text>
                       </View>
                     </View>
 
-                    {hasData && item.check && item.check.analysis_json && (
+                    {hasData && item.check?.analysis_json ? (
                       <View style={styles.reportDetails}>
                         {Object.entries(item.check.analysis_json).map(([key, value]) => (
                           <View key={key} style={styles.reportDetailRow}>
                             <Text style={styles.reportDetailLabel}>
-                              {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+                              {key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
                             </Text>
                             <Text style={styles.reportDetailValue}>
                               {typeof value === 'object' ? JSON.stringify(value) : String(value)}
                             </Text>
                           </View>
                         ))}
-                        {item.check.confidence && (
-                          <View style={styles.confidenceBar}>
-                            <Text style={styles.confidenceLabel}>
-                              Confidence: {Math.round(item.check.confidence * 100)}%
-                            </Text>
-                            <View style={styles.confidenceBarBg}>
-                              <View 
-                                style={[
-                                  styles.confidenceBarFill, 
-                                  { width: `${item.check.confidence * 100}%` }
-                                ]} 
-                              />
-                            </View>
-                          </View>
-                        )}
                       </View>
-                    )}
-
-                    {/* Historical Data */}
-                    {hasData && item.allChecks && item.allChecks.length > 0 && (
-                      <View style={styles.historySection}>
-                        <Text style={styles.historyTitle}>History ({item.allChecks.length} checks)</Text>
-                        {item.allChecks.map((check, idx) => (
-                          <View key={check.id} style={styles.historyItem}>
-                            <View style={styles.historyLeft}>
-                              <Text style={styles.historyDate}>
-                                {new Date(check.created_at).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric'
-                                })}
-                              </Text>
-                              <Text style={styles.historyTime}>
-                                {new Date(check.created_at).toLocaleTimeString('en-US', {
-                                  hour: 'numeric',
-                                  minute: '2-digit'
-                                })}
-                              </Text>
-                            </View>
-                            <View style={styles.historyRight}>
-                              <Text style={[
-                                styles.historyScore,
-                                { color: check.score >= 90 ? Colors.health.excellent : 
-                                         check.score >= 75 ? Colors.health.good : 
-                                         check.score >= 60 ? Colors.health.fair : Colors.health.poor }
-                              ]}>
-                                {Math.round(check.score)}
-                              </Text>
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-
-                    {!hasData && (
-                      <Text style={styles.noDataText}>No check data available</Text>
+                    ) : (
+                      <Text style={styles.noDataText}>No check data available yet.</Text>
                     )}
                   </View>
                 );
@@ -509,90 +466,340 @@ export default function HealthScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: Colors.neutral.background,
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F4ED',
+  },
+  loadingState: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollView: {
     flex: 1,
-    padding: 20,
   },
-  
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 120,
+  },
   mockDataBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primary.orange + '20',
+    backgroundColor: '#FFF1E3',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     marginBottom: 16,
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#F1D7BA',
   },
   mockDataText: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.primary.orangeDark,
     fontWeight: '600',
+    flex: 1,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
     color: Colors.neutral.textLight,
   },
-  
-  headerSection: { marginBottom: 20 },
-  pageTitle: { fontSize: 28, fontWeight: '800', color: Colors.primary.brown },
-  lastUpdate: { fontSize: 13, color: Colors.neutral.textLight, marginTop: 4 },
-
-  card: { backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-
-  // Clean Score Card (No Border)
-  scoreCard: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 20, 
-    // No Border Width/Color here
+  headerSection: {
+    marginBottom: 18,
   },
-  scoreLeft: { marginRight: 20 },
-  scoreRing: { 
-    width: 80, height: 80, borderRadius: 40, 
-    borderWidth: 6, borderColor: Colors.health.excellent, 
-    justifyContent: 'center', alignItems: 'center', 
-    backgroundColor: '#fff' 
+  pageTitle: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: Colors.primary.brown,
   },
-  scoreText: { fontSize: 26, fontWeight: '800', color: Colors.primary.brown },
-  scoreSub: { fontSize: 10, color: Colors.neutral.textLight },
-  scoreRight: { flex: 1 },
-  statusTitle: { fontSize: 18, fontWeight: '700', color: Colors.primary.brown, marginBottom: 4 },
-  statusDesc: { fontSize: 13, color: Colors.neutral.textLight, marginBottom: 12, lineHeight: 18 },
-  detailBtn: { 
-    backgroundColor: Colors.primary.orange + '20', 
-    paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, alignSelf: 'flex-start' 
+  lastUpdate: {
+    fontSize: 13,
+    color: Colors.neutral.textLight,
+    marginTop: 4,
   },
-  detailBtnText: { color: Colors.primary.orangeDark, fontSize: 12, fontWeight: '600' },
-
-  // Vitals Grid
-  sectionTitle: { fontSize: 20, fontWeight: '700', color: Colors.primary.brown, marginBottom: 12, marginTop: 10 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  vitalCard: { width: '48%', alignItems: 'center', paddingVertical: 20 },
-  iconCircle: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  vitalValue: { fontSize: 20, fontWeight: '700', color: Colors.primary.brown },
-  vitalLabel: { fontSize: 14, color: Colors.neutral.textLight },
-
-  // Vet Card
-  vetCard: { padding: 20, marginBottom: 40 },
-  vetHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  vetAvatar: { width: 60, height: 60, borderRadius: 30, marginRight: 15 },
-  vetInfo: { flex: 1 },
-  vetName: { fontSize: 18, fontWeight: '700', color: Colors.primary.brown },
-  vetSpec: { fontSize: 13, color: Colors.neutral.textLight, marginBottom: 4 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  ratingText: { fontSize: 12, color: Colors.neutral.textLight, fontWeight: '600' },
-
-  vetActions: { flexDirection: 'row', gap: 12 },
-  callButton: { flex: 1, backgroundColor: Colors.primary.orangeDark, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 14, borderRadius: 14, gap: 8 },
-  callBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  chatButton: { width: 50, backgroundColor: Colors.neutral.background, justifyContent: 'center', alignItems: 'center', borderRadius: 14, borderWidth: 1, borderColor: Colors.neutral.border },
-
-  // Modal Styles
+  card: {
+    backgroundColor: '#FFF9F3',
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#EADDCF',
+  },
+  heroCard: {
+    backgroundColor: '#F4E7D9',
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFF8EF',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  heroBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary.brown,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  reportButton: {
+    backgroundColor: '#FFF8EF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  reportButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.primary.brown,
+  },
+  heroMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  scoreRingWrap: {
+    marginRight: 2,
+  },
+  scoreRing: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderWidth: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFDF9',
+  },
+  scoreText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+  },
+  scoreSub: {
+    fontSize: 11,
+    color: Colors.neutral.textLight,
+  },
+  heroCopy: {
+    flex: 1,
+  },
+  statusTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 6,
+  },
+  statusDesc: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.primary.brown,
+    marginBottom: 8,
+  },
+  statusSupport: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: Colors.neutral.textLight,
+  },
+  sectionTitle: {
+    fontSize: 21,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 12,
+    marginTop: 6,
+  },
+  teleVetCard: {
+    backgroundColor: '#F2E6D9',
+    borderColor: '#E7D5C5',
+  },
+  teleVetTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    marginBottom: 16,
+  },
+  teleVetCopy: {
+    flex: 1,
+  },
+  teleVetTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 8,
+  },
+  teleVetSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.neutral.textLight,
+  },
+  vetAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#FFF8EF',
+  },
+  vetMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 16,
+    marginBottom: 8,
+  },
+  vetMetaItem: {
+    flex: 1,
+  },
+  vetName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.primary.brown,
+    marginBottom: 4,
+  },
+  vetSpec: {
+    fontSize: 13,
+    color: Colors.neutral.textLight,
+  },
+  vetFee: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    textAlign: 'right',
+  },
+  vetFeeLabel: {
+    fontSize: 12,
+    color: Colors.neutral.textLight,
+    textAlign: 'right',
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 18,
+  },
+  ratingText: {
+    fontSize: 13,
+    color: Colors.neutral.textLight,
+    fontWeight: '600',
+  },
+  vetActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  callButton: {
+    flex: 1,
+    backgroundColor: Colors.primary.brown,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 15,
+    borderRadius: 16,
+    gap: 8,
+  },
+  callBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  secondaryVetButton: {
+    width: 54,
+    borderRadius: 16,
+    backgroundColor: '#FFF8EF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E7D8C9',
+  },
+  statsGrid: {
+    gap: 12,
+  },
+  statCard: {
+    paddingVertical: 18,
+  },
+  statIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.neutral.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 6,
+  },
+  statNote: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.neutral.textLight,
+  },
+  checkCard: {
+    paddingVertical: 16,
+  },
+  checkHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  checkLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  checkIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#FFF0E3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  checkCopy: {
+    flex: 1,
+  },
+  checkTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.primary.brown,
+    marginBottom: 4,
+  },
+  checkMeta: {
+    fontSize: 13,
+    color: Colors.neutral.textLight,
+  },
+  checkScore: {
+    fontSize: 28,
+    fontWeight: '800',
+  },
+  emptyCard: {
+    alignItems: 'flex-start',
+  },
+  emptyCardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.primary.brown,
+    marginBottom: 6,
+  },
+  emptyCardText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.neutral.textLight,
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -628,8 +835,6 @@ const styles = StyleSheet.create({
   modalScroll: {
     flex: 1,
   },
-
-  // Report Card Styles
   reportCard: {
     backgroundColor: Colors.neutral.background,
     borderRadius: 16,
@@ -665,12 +870,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.neutral.textLight,
   },
-  reportCheckCount: {
-    fontSize: 11,
-    color: Colors.primary.orangeDark,
-    fontWeight: '600',
-    marginTop: 2,
-  },
   reportScore: {
     alignItems: 'center',
   },
@@ -692,6 +891,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 6,
+    gap: 12,
   },
   reportDetailLabel: {
     fontSize: 14,
@@ -705,73 +905,11 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
   },
-  confidenceBar: {
-    marginTop: 12,
-  },
-  confidenceLabel: {
-    fontSize: 12,
-    color: Colors.neutral.textLight,
-    marginBottom: 6,
-  },
-  confidenceBarBg: {
-    height: 6,
-    backgroundColor: Colors.neutral.border,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  confidenceBarFill: {
-    height: '100%',
-    backgroundColor: Colors.primary.orangeDark,
-  },
   noDataText: {
     fontSize: 14,
     color: Colors.neutral.textLight,
     fontStyle: 'italic',
     textAlign: 'center',
     paddingVertical: 8,
-  },
-  
-  // History Styles
-  historySection: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.neutral.border,
-  },
-  historyTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.primary.brown,
-    marginBottom: 12,
-  },
-  historyItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#FAFAFA',
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  historyLeft: {
-    flex: 1,
-  },
-  historyDate: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.primary.brown,
-    marginBottom: 2,
-  },
-  historyTime: {
-    fontSize: 11,
-    color: Colors.neutral.textLight,
-  },
-  historyRight: {
-    marginLeft: 12,
-  },
-  historyScore: {
-    fontSize: 24,
-    fontWeight: '800',
   },
 });

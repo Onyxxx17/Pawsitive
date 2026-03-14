@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Platform, Alert, Modal } from 'react-native';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
@@ -157,19 +157,28 @@ const CustomHeader = () => {
 };
 
 // 📸 The "Nicer" Featured Camera Button
-const CustomCVButton = ({ onPress }: any) => (
+const CustomCVButton = ({ onPress, isSelected }: { onPress?: () => void; isSelected: boolean }) => {
+  return (
   <TouchableOpacity
     style={styles.cameraButtonContainer}
     onPress={onPress}
     activeOpacity={0.9}
   >
-    <View style={styles.cameraButtonOuter}>
-        <MaterialCommunityIcons name="camera-iris" size={32} color="#FFF" />
+    <View style={[styles.cameraButtonOuter, isSelected && styles.cameraButtonOuterActive]}>
+        <MaterialCommunityIcons
+          name="camera-iris"
+          size={32}
+          color="#FFF"
+        />
     </View>
   </TouchableOpacity>
-);
+  );
+};
 
 export default function TabLayout() {
+  const pathname = usePathname();
+  const isCameraActive = pathname === '/camera';
+
   return (
     <Tabs
       screenOptions={{
@@ -199,7 +208,7 @@ export default function TabLayout() {
         name="camera"
         options={{
           title: '',
-          tabBarButton: (props) => <CustomCVButton {...props} />,
+          tabBarButton: ({ onPress }) => <CustomCVButton onPress={onPress} isSelected={isCameraActive} />,
         }}
       />
       <Tabs.Screen
@@ -245,6 +254,7 @@ const styles = StyleSheet.create({
   
   cameraButtonContainer: { top: -25, justifyContent: 'center', alignItems: 'center' },
   cameraButtonOuter: { width: 64, height: 64, borderRadius: 32, backgroundColor: Colors.primary.orangeDark, justifyContent: 'center', alignItems: 'center', borderWidth: 4, borderColor: '#ffffff', shadowColor: Colors.primary.orangeDark, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 8 },
+  cameraButtonOuterActive: { backgroundColor: Colors.primary.brown, borderColor: '#FFF3E6', shadowColor: Colors.primary.brown },
 
   // Sidebar Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-start' },
