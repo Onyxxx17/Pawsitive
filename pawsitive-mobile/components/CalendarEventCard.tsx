@@ -80,7 +80,7 @@ export default function CalendarEventCard({
     <View style={styles.card}>
       <View style={styles.header}>
         <View style={styles.iconContainer}>
-          <Ionicons name="calendar-outline" size={24} color={Colors.primary.brown} />
+          <Ionicons name="calendar-outline" size={22} color={Colors.primary.brown} />
         </View>
         <View style={styles.titleContainer}>
           <Text style={styles.title}>{title}</Text>
@@ -153,15 +153,12 @@ export default function CalendarEventCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: '#FFF8EF',
+    borderRadius: 20,
     padding: 16,
     marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    borderWidth: 1,
+    borderColor: '#EADDCF',
   },
   header: {
     flexDirection: 'row',
@@ -170,8 +167,8 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.primary.brown + '20',
+    borderRadius: 14,
+    backgroundColor: '#F2E5D7',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -192,7 +189,7 @@ const styles = StyleSheet.create({
   timeText: {
     fontSize: 14,
     color: Colors.primary.brown,
-    fontWeight: '500',
+    fontWeight: '700',
   },
   detailRow: {
     flexDirection: 'row',
@@ -213,7 +210,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral.border,
+    borderTopColor: '#E7D7C7',
     paddingTop: 12,
     gap: 12,
   },
@@ -238,12 +235,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 10,
-    borderRadius: 8,
-    backgroundColor: Colors.primary.brown + '10',
+    borderRadius: 12,
+    backgroundColor: '#F2E5D7',
     gap: 6,
   },
   deleteButton: {
-    backgroundColor: '#FF6B6B15',
+    backgroundColor: '#FFE7E3',
   },
   actionText: {
     fontSize: 14,

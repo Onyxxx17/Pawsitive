@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -23,7 +23,6 @@ import CalendarImportModal from '@/components/CalendarImportModal';
 import CalendarEventCard from '@/components/CalendarEventCard';
 import { useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { getCalendarEvents } from '@/utils/calendarUtils';
 
 type Reminder = {
   id: string;
@@ -50,6 +49,15 @@ type CalendarEvent = {
 };
 
 type ReminderType = 'feeding' | 'walking' | 'medication' | 'grooming' | 'checkup' | 'custom';
+
+const REMINDER_ACCENTS: Record<string, { bg: string; soft: string; tint: string }> = {
+  feeding: { bg: '#FFE5D0', soft: '#FFF7F0', tint: '#C8702F' },
+  walking: { bg: '#DDF5F0', soft: '#F5FCFA', tint: '#237A6B' },
+  medication: { bg: '#EFE6FF', soft: '#FAF7FF', tint: '#7B55B7' },
+  grooming: { bg: '#E5F1FF', soft: '#F7FBFF', tint: '#3877B7' },
+  checkup: { bg: '#E7F0FF', soft: '#F5F9FF', tint: '#3569B1' },
+  custom: { bg: '#FFF1DC', soft: '#FFFBF5', tint: '#A96B25' },
+};
 
 // Helper function to get the start of the week (Sunday)
 function getWeekStart(date: Date): Date {
@@ -621,97 +629,119 @@ export default function ActivityScreen() {
     return found?.icon || 'notifications';
   };
 
+  const selectedDateLabel = useMemo(
+    () =>
+      selectedDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+    [selectedDate],
+  );
+
+  const selectedMonthLabel = useMemo(
+    () => selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+    [selectedDate],
+  );
+
   return (
     <View style={styles.container}>
-      {/* Week Navigation */}
-      <View style={styles.weekHeader}>
-        <TouchableOpacity onPress={() => changeWeek(-1)} style={styles.navButton}>
-          <Ionicons name="chevron-back" size={24} color={Colors.primary.brown} />
-        </TouchableOpacity>
-        <View style={styles.monthContainer}>
-          <TouchableOpacity onPress={goToToday}>
-            <Text style={styles.monthText}>
-              {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-            </Text>
-          </TouchableOpacity>
+      <View style={styles.plannerHero}>
+        <View style={styles.plannerHeroTop}>
+          <View style={styles.plannerCopy}>
+            <View style={styles.plannerBadge}>
+              <Ionicons name="calendar-clear-outline" size={16} color={Colors.primary.brown} />
+              <Text style={styles.plannerBadgeText}>Planner</Text>
+            </View>
+            <Text style={styles.monthText}>{selectedMonthLabel}</Text>
+            <Text style={styles.selectedDateText}>{selectedDateLabel}</Text>
+          </View>
           <TouchableOpacity onPress={goToToday} style={styles.todayButton}>
-            <Ionicons name="today" size={16} color={Colors.primary.orange} />
+            <Ionicons name="today-outline" size={16} color={Colors.primary.brown} />
             <Text style={styles.todayButtonText}>Today</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={() => changeWeek(1)} style={styles.navButton}>
-          <Ionicons name="chevron-forward" size={24} color={Colors.primary.brown} />
-        </TouchableOpacity>
+
+        <View style={styles.weekHeader}>
+          <TouchableOpacity onPress={() => changeWeek(-1)} style={styles.navButton}>
+            <Ionicons name="chevron-back" size={20} color={Colors.primary.brown} />
+          </TouchableOpacity>
+          <Text style={styles.weekHint}>Swipe or tap through the week</Text>
+          <TouchableOpacity onPress={() => changeWeek(1)} style={styles.navButton}>
+            <Ionicons name="chevron-forward" size={20} color={Colors.primary.brown} />
+          </TouchableOpacity>
+        </View>
+
+        <Animated.View
+          style={[styles.calendarStrip, { transform: [{ translateX: pan }] }]}
+          {...panResponder.panHandlers}
+        >
+          {getWeekDays(weekStart).map((date, index) => {
+            const dayLetter = ['S', 'M', 'T', 'W', 'T', 'F', 'S'][date.getDay()];
+            const dayNumber = date.getDate();
+            const isTodayDate = isToday(date);
+            const isSelectedDate = isSelected(date);
+            const isPast = isPastDate(date);
+
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.dayItem,
+                  isTodayDate && styles.todayItem,
+                  isSelectedDate && styles.selectedItem,
+                  isPast && styles.pastItem,
+                ]}
+                onPress={() => setSelectedDate(new Date(date))}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.dayText,
+                    (isTodayDate || isSelectedDate) && styles.activeText,
+                    isPast && styles.pastText,
+                  ]}
+                >
+                  {dayLetter}
+                </Text>
+                <Text
+                  style={[
+                    styles.dateText,
+                    (isTodayDate || isSelectedDate) && styles.activeText,
+                    isPast && styles.pastText,
+                  ]}
+                >
+                  {dayNumber}
+                </Text>
+                {isTodayDate && !isSelectedDate ? <View style={styles.todayDot} /> : null}
+              </TouchableOpacity>
+            );
+          })}
+        </Animated.View>
       </View>
 
-      {/* Weekly Calendar Strip */}
-      <Animated.View 
-        style={[styles.calendarStrip, { transform: [{ translateX: pan }] }]}
-        {...panResponder.panHandlers}
-      >
-        {getWeekDays(weekStart).map((date, index) => {
-          const dayLetter = ['S','M','T','W','T','F','S'][date.getDay()];
-          const dayNumber = date.getDate();
-          const isTodayDate = isToday(date);
-          const isSelectedDate = isSelected(date);
-          const isPast = isPastDate(date);
-
-          return (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.dayItem,
-                isTodayDate && styles.todayItem,
-                isSelectedDate && styles.selectedItem,
-                isPast && styles.pastItem,
-              ]}
-              onPress={() => setSelectedDate(new Date(date))}
-              activeOpacity={0.7}
-            >
-              <Text style={[
-                styles.dayText,
-                (isTodayDate || isSelectedDate) && styles.activeText,
-                isPast && styles.pastText,
-              ]}>
-                {dayLetter}
-              </Text>
-              <Text style={[
-                styles.dateText,
-                (isTodayDate || isSelectedDate) && styles.activeText,
-                isPast && styles.pastText,
-              ]}>
-                {dayNumber}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </Animated.View>
-
-      {/* Selected Date Info */}
       <View style={styles.selectedDateHeader}>
-        <Text style={styles.selectedDateText}>
-          {selectedDate.toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            month: 'long', 
-            day: 'numeric' 
-          })}
-        </Text>
+        <View>
+          <Text style={styles.sectionEyebrow}>Agenda</Text>
+          <Text style={styles.selectedDateAgendaText}>{selectedDateLabel}</Text>
+        </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.importIconButton}
             onPress={() => setImportModalVisible(true)}
           >
-            <Ionicons name="calendar" size={28} color={Colors.primary.brown} />
+            <Ionicons name="download-outline" size={20} color={Colors.primary.brown} />
           </TouchableOpacity>
           {!isPastDate(selectedDate) && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.addButton}
               onPress={() => {
-                resetForm(); // Reset form before opening modal for new reminder
+                resetForm();
                 setModalVisible(true);
               }}
             >
-              <Ionicons name="add-circle" size={32} color={Colors.primary.orangeDark} />
+              <Ionicons name="add" size={20} color="#FFF9F2" />
+              <Text style={styles.addButtonText}>New</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -734,7 +764,13 @@ export default function ActivityScreen() {
                 {reminders
                   .filter(r => !r.is_completed)
                   .map((reminder) => (
-                    <View key={reminder.id} style={styles.reminderCard}>
+                    <View
+                      key={reminder.id}
+                      style={[
+                        styles.reminderCard,
+                        { backgroundColor: (REMINDER_ACCENTS[reminder.type] || REMINDER_ACCENTS.custom).soft },
+                      ]}
+                    >
                       <TouchableOpacity
                         onPress={() => handleToggleReminder(reminder.id, reminder.is_completed || false)}
                         style={styles.checkbox}
@@ -752,11 +788,16 @@ export default function ActivityScreen() {
                         onPress={() => handleEditReminder(reminder)}
                         style={styles.reminderContent}
                       >
-                        <View style={[styles.reminderIcon]}>
+                        <View
+                          style={[
+                            styles.reminderIcon,
+                            { backgroundColor: (REMINDER_ACCENTS[reminder.type] || REMINDER_ACCENTS.custom).bg },
+                          ]}
+                        >
                           <Ionicons 
                             name={getIconForType(reminder.type) as any} 
                             size={20} 
-                            color='#FFF'
+                            color={(REMINDER_ACCENTS[reminder.type] || REMINDER_ACCENTS.custom).tint}
                           />
                         </View>
                         
@@ -785,7 +826,7 @@ export default function ActivityScreen() {
             {/* Calendar Events */}
             {calendarEvents.length > 0 && (
               <>
-                <Text style={styles.sectionTitle}>📅 Calendar Events</Text>
+                <Text style={styles.sectionTitle}>Calendar Events</Text>
                 {calendarEvents.map((event) => (
                   <CalendarEventCard
                     key={event.id}
@@ -812,7 +853,14 @@ export default function ActivityScreen() {
                 {reminders
                   .filter(r => r.is_completed)
                   .map((reminder) => (
-                    <View key={reminder.id} style={styles.reminderCard}>
+                    <View
+                      key={reminder.id}
+                      style={[
+                        styles.reminderCard,
+                        styles.completedReminderCard,
+                        { backgroundColor: (REMINDER_ACCENTS[reminder.type] || REMINDER_ACCENTS.custom).soft },
+                      ]}
+                    >
                       <TouchableOpacity
                         onPress={() => handleToggleReminder(reminder.id, reminder.is_completed || false)}
                         style={styles.checkbox}
@@ -830,7 +878,13 @@ export default function ActivityScreen() {
                         onPress={() => handleEditReminder(reminder)}
                         style={styles.reminderContent}
                       >
-                        <View style={[styles.reminderIcon, styles.inactiveIcon]}>
+                        <View
+                          style={[
+                            styles.reminderIcon,
+                            styles.inactiveIcon,
+                            { backgroundColor: '#EFE7DE' },
+                          ]}
+                        >
                           <Ionicons 
                             name={getIconForType(reminder.type) as any} 
                             size={20} 
@@ -899,49 +953,102 @@ export default function ActivityScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.neutral.background, padding: 16 },
+  container: { flex: 1, backgroundColor: '#F8F4ED', padding: 16 },
+  plannerHero: {
+    backgroundColor: '#F4E8DB',
+    borderRadius: 30,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E8D9C8',
+    marginBottom: 18,
+  },
+  plannerHeroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 16,
+    marginBottom: 18,
+  },
+  plannerCopy: {
+    flex: 1,
+  },
+  plannerBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFF8EF',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 12,
+  },
+  plannerBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary.brown,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   weekHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 8,
+    marginBottom: 14,
   },
-  navButton: { padding: 8 },
-  monthContainer: { alignItems: 'center', flex: 1 },
-  monthText: { fontSize: 18, fontWeight: '600', color: Colors.primary.brown, textAlign: 'center' },
+  navButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF8EF',
+    borderWidth: 1,
+    borderColor: '#EADDCF',
+  },
+  weekHint: {
+    fontSize: 13,
+    color: Colors.neutral.textLight,
+    fontWeight: '600',
+  },
+  monthText: { fontSize: 26, fontWeight: '800', color: Colors.primary.brown },
   todayButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFF8EF',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#EADDCF',
   },
-  todayButtonText: { fontSize: 12, color: Colors.primary.orange, fontWeight: '500' },
+  todayButtonText: { fontSize: 13, color: Colors.primary.brown, fontWeight: '700' },
   calendarStrip: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 20,
-    paddingVertical: 10,
+    paddingVertical: 4,
   },
   dayItem: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: '#F5F5F5',
+    borderRadius: 18,
+    backgroundColor: '#FBF6F0',
     flex: 1,
     marginHorizontal: 3,
+    borderWidth: 1,
+    borderColor: '#EAE0D5',
   },
   todayItem: {
-    backgroundColor: Colors.primary.brown,
+    borderColor: '#D9C4AD',
   },
   selectedItem: {
-    backgroundColor: Colors.primary.orangeDark,
+    backgroundColor: Colors.primary.brown,
+    borderColor: Colors.primary.brown,
   },
   pastItem: {
-    opacity: 0.4,
+    opacity: 0.58,
   },
   dayText: {
     fontSize: 12,
@@ -960,34 +1067,78 @@ const styles = StyleSheet.create({
   pastText: {
     color: Colors.neutral.textLight,
   },
+  todayDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.primary.orangeDark,
+    marginTop: 8,
+  },
   selectedDateHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  selectedDateText: { fontSize: 16, fontWeight: '600', color: Colors.primary.brown },
+  sectionEyebrow: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary.orangeDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  selectedDateAgendaText: { fontSize: 20, fontWeight: '800', color: Colors.primary.brown },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  importIconButton: { padding: 4 },
-  addButton: { padding: 4 },
+  importIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF8EF',
+    borderWidth: 1,
+    borderColor: '#EADDCF',
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.primary.brown,
+    paddingHorizontal: 14,
+    height: 42,
+    borderRadius: 21,
+  },
+  addButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFF9F2',
+  },
   remindersList: { flex: 1 },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '800',
     color: Colors.primary.brown,
-    marginTop: 8,
+    marginTop: 10,
     marginBottom: 12,
   },
-  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60 },
+  emptyState: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 56,
+    backgroundColor: '#FFF8EF',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#EADDCF',
+  },
   emptyText: { fontSize: 16, color: Colors.neutral.textLight, marginTop: 12 },
-  emptySubtext: { fontSize: 14, color: Colors.neutral.textLight, marginTop: 4 },
+  emptySubtext: { fontSize: 14, color: Colors.neutral.textLight, marginTop: 6 },
   reminderCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 20,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#EADDCF',
+  },
+  completedReminderCard: {
+    opacity: 0.88,
   },
   checkbox: {
     marginRight: 10,
@@ -1003,17 +1154,16 @@ const styles = StyleSheet.create({
   reminderIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.primary.orange,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   inactiveIcon: { backgroundColor: Colors.neutral.border },
   reminderInfo: { flex: 1 },
-  reminderTitle: { fontSize: 16, fontWeight: '600', color: Colors.primary.brown, marginBottom: 4 },
+  reminderTitle: { fontSize: 16, fontWeight: '700', color: Colors.primary.brown, marginBottom: 4 },
   inactiveText: { color: Colors.neutral.textLight, textDecorationLine: 'line-through' },
-  reminderTime: { fontSize: 14, color: Colors.neutral.textLight },
+  reminderTime: { fontSize: 14, color: Colors.neutral.textLight, lineHeight: 20 },
   deleteButton: {
     padding: 8,
   },
