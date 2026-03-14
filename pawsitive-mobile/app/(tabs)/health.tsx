@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Modal } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
@@ -45,20 +45,7 @@ export default function HealthScreen() {
   const [usingMockData, setUsingMockData] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
 
-  useEffect(() => {
-    if (activePet?.id && activePet.id !== 'default') {
-      fetchHealthData();
-    } else {
-      setUsingMockData(true);
-      setLoading(false);
-    }
-  }, [activePet]);
-
-  useEffect(() => {
-    console.log('Report modal visible:', reportModalVisible);
-  }, [reportModalVisible]);
-
-  const fetchHealthData = async () => {
+  const fetchHealthData = useCallback(async () => {
     if (!activePet?.id || activePet.id === 'default') return;
 
     setLoading(true);
@@ -108,7 +95,16 @@ export default function HealthScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activePet?.id]);
+
+  useEffect(() => {
+    if (activePet?.id && activePet.id !== 'default') {
+      fetchHealthData();
+    } else {
+      setUsingMockData(true);
+      setLoading(false);
+    }
+  }, [activePet?.id, fetchHealthData]);
 
   const getOverallScore = () => {
     if (healthChecks.length === 0) return 92; // Mock score
@@ -266,7 +262,7 @@ export default function HealthScreen() {
         <View style={styles.scoreRight}>
           <Text style={styles.statusTitle}>{healthStatus.title}</Text>
           <Text style={styles.statusDesc}>
-            {activePet?.name || "Your pet"}'s vitals are {overallScore >= 90 ? 'stable' : 'being monitored'}. 
+            {`${activePet?.name || 'Your pet'}'s vitals are ${overallScore >= 90 ? 'stable' : 'being monitored'}.`}
             {overallScore >= 90 ? ' Keep up the hydration and daily walks!' : ' Consider scheduling a check-up.'}
           </Text>
           <TouchableOpacity 

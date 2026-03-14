@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -49,12 +49,7 @@ export default function VetDashboardScreen() {
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
   const { setVet: setGlobalVet, setVetId, vetId: globalVetId } = useVet();
 
-  useEffect(() => {
-    fetchVetProfile();
-    fetchAppointments();
-  }, [params.vetId]);
-
-  const fetchVetProfile = async () => {
+  const fetchVetProfile = useCallback(async () => {
     try {
       const vetId = params.vetId as string;
       if (!vetId) {
@@ -86,9 +81,9 @@ export default function VetDashboardScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.vetId, router, setGlobalVet, setVetId]);
 
-  const fetchAppointments = async () => {
+  const fetchAppointments = useCallback(async () => {
     try {
       const vetId = globalVetId || (params.vetId as string);
       if (!vetId) return;
@@ -167,7 +162,12 @@ export default function VetDashboardScreen() {
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [globalVetId, params.vetId]);
+
+  useEffect(() => {
+    fetchVetProfile();
+    fetchAppointments();
+  }, [fetchAppointments, fetchVetProfile]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -200,21 +200,6 @@ export default function VetDashboardScreen() {
       return upcomingAppointments[0];
     }
     return null;
-  };
-
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          style: 'destructive',
-          onPress: () => router.replace('/landing')
-        },
-      ]
-    );
   };
 
   if (loading) {
@@ -250,7 +235,7 @@ export default function VetDashboardScreen() {
             </View>
             <View style={styles.statContent}>
               <Text style={styles.whiteStatValue}>{todayAppointments.length}</Text>
-              <Text style={styles.whiteStatLabel}>Today's Appointments</Text>
+              <Text style={styles.whiteStatLabel}>{`Today's Appointments`}</Text>
               <Text style={styles.whiteStatSubtext}>
                 {todayAppointments.length === 0 
                   ? 'No appointments scheduled' 

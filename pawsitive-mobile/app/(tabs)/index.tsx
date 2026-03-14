@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
@@ -17,58 +18,47 @@ type Reminder = {
   recurrence_end_date?: string | null;
 };
 
-const REMINDER_TYPE_CONFIG: Record<string, { icon: string; color: string; bgColor: string }> = {
-  feeding: { icon: 'restaurant', color: '#FF6B6B', bgColor: '#FFE5E5' },
-  walking: { icon: 'walk', color: '#4ECDC4', bgColor: '#E0F7F6' },
-  medication: { icon: 'medical', color: '#a053bfff', bgColor: '#F4E8FB' },
-  grooming: { icon: 'cut', color: '#3498DB', bgColor: '#E3F2FD' },
-  checkup: { icon: 'medkit', color: '#2196F3', bgColor: '#E3F2FD' },
-  custom: { icon: 'notifications', color: '#F39C12', bgColor: '#FFF4E0' },
+const REMINDER_TYPE_CONFIG: Record<string, { icon: string; color: string; bgColor: string; softColor: string }> = {
+  feeding: { icon: 'restaurant', color: '#C8702F', bgColor: '#FFE5D0', softColor: '#FFF7F0' },
+  walking: { icon: 'walk', color: '#237A6B', bgColor: '#DDF5F0', softColor: '#F5FCFA' },
+  medication: { icon: 'medical', color: '#7B55B7', bgColor: '#EFE6FF', softColor: '#FAF7FF' },
+  grooming: { icon: 'cut', color: '#3877B7', bgColor: '#E5F1FF', softColor: '#F7FBFF' },
+  checkup: { icon: 'medkit', color: '#3569B1', bgColor: '#E7F0FF', softColor: '#F5F9FF' },
+  custom: { icon: 'notifications', color: '#A96B25', bgColor: '#FFF1DC', softColor: '#FFFBF5' },
 };
+
+const QUICK_ACTIONS = [
+  { icon: 'food-drumstick', label: 'Fed', tint: '#F4E5D4' },
+  { icon: 'water', label: 'Water', tint: '#E1F0FB' },
+  { icon: 'walk', label: 'Walk', tint: '#E3F4EA' },
+  { icon: 'pill', label: 'Meds', tint: '#F2E8FB' },
+];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { activePet, loading: petsLoading } = usePet(); // 👈 Using Dynamic Pet Data
+  const { activePet, loading: petsLoading } = usePet();
   const [upcomingReminders, setUpcomingReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Dynamic greeting based on current time
-  const getGreeting = () => {
+  const greeting = useMemo(() => {
     const hour = new Date().getHours();
-    
+
     if (hour >= 5 && hour < 12) {
-      return { title: 'Good Morning', icon: 'weather-sunny' };
-    } else if (hour >= 12 && hour < 17) {
-      return { title: 'Good Afternoon', icon: 'partly-sunny' };
-    } else if (hour >= 17 && hour < 21) {
-      return { title: 'Good Evening', icon: 'moon' };
-    } else {
-      return { title: 'Good Night', icon: 'moon' };
+      return { title: 'Good Morning', icon: 'weather-sunny' as const, accent: '#FFF4CF' };
     }
-  };
-
-  const greeting = getGreeting();
-
-  useEffect(() => {
-    if (activePet?.id && activePet.id !== 'default') {
-      fetchUpcomingReminders();
+    if (hour >= 12 && hour < 17) {
+      return { title: 'Good Afternoon', icon: 'partly-sunny' as const, accent: '#FFE7C7' };
     }
-  }, [activePet?.id]);
+    if (hour >= 17 && hour < 21) {
+      return { title: 'Good Evening', icon: 'moon' as const, accent: '#E9DDF6' };
+    }
+    return { title: 'Good Night', icon: 'moon' as const, accent: '#E3DCF4' };
+  }, []);
 
-  // Refresh reminders when screen comes into focus
-  useFocusEffect(
-    React.useCallback(() => {
-      if (activePet?.id && activePet.id !== 'default') {
-        fetchUpcomingReminders();
-      }
-    }, [activePet?.id])
-  );
-
-  const fetchUpcomingReminders = async () => {
+  const fetchUpcomingReminders = useCallback(async () => {
     try {
       setLoading(true);
-      
-      // Check if we have a valid pet ID
+
       if (!activePet?.id || activePet.id === 'default') {
         setUpcomingReminders([]);
         setLoading(false);
@@ -84,35 +74,27 @@ export default function HomeScreen() {
 
       if (error) throw error;
 
-      // Filter and process reminders
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      const upcoming = (data || []).filter((reminder) => {
-        const triggerDate = new Date(reminder.next_trigger_at);
-        
-        // Check if reminder has ended
-        if (reminder.recurrence_end_date) {
-          const endDate = new Date(reminder.recurrence_end_date);
-          if (today > endDate) return false;
-        }
 
-        // For recurring reminders, check if they should appear today or in the future
-        if (reminder.recurrence_type && reminder.recurrence_type !== 'once') {
-          const triggerDay = new Date(triggerDate.getFullYear(), triggerDate.getMonth(), triggerDate.getDate());
-          
-          if (reminder.recurrence_type === 'daily') {
-            return true; // Daily reminders are always upcoming
-          } else if (reminder.recurrence_type === 'weekly') {
-            return true; // Weekly reminders will repeat
-          } else if (reminder.recurrence_type === 'monthly') {
-            return true; // Monthly reminders will repeat
+      const upcoming = (data || [])
+        .filter((reminder) => {
+          const triggerDate = new Date(reminder.next_trigger_at);
+
+          if (reminder.recurrence_end_date) {
+            const endDate = new Date(reminder.recurrence_end_date);
+            if (today > endDate) return false;
           }
-        }
-        
-        // For one-time reminders or specific dates, only show if in the future
-        return triggerDate >= now;
-      }).slice(0, 2); // Get only the first 2
+
+          if (reminder.recurrence_type && reminder.recurrence_type !== 'once') {
+            if (reminder.recurrence_type === 'daily') return true;
+            if (reminder.recurrence_type === 'weekly') return true;
+            if (reminder.recurrence_type === 'monthly') return true;
+          }
+
+          return triggerDate >= now;
+        })
+        .slice(0, 3);
 
       setUpcomingReminders(upcoming);
     } catch (error) {
@@ -120,115 +102,213 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activePet?.id]);
+
+  useEffect(() => {
+    if (activePet?.id && activePet.id !== 'default') {
+      fetchUpcomingReminders();
+    }
+  }, [activePet?.id, fetchUpcomingReminders]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (activePet?.id && activePet.id !== 'default') {
+        fetchUpcomingReminders();
+      }
+    }, [activePet?.id, fetchUpcomingReminders]),
+  );
+
+  const nextReminder = upcomingReminders[0];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      
-      {/* Show loading state while pets are being fetched */}
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       {petsLoading ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>Loading your pets...</Text>
         </View>
       ) : activePet?.id === 'default' ? (
-        // Show "Add a Pet" state only when loading is done and no pets exist
-        <View style={styles.emptyState}>
-          <Ionicons name="paw" size={80} color={Colors.neutral.textLight} />
-          <Text style={styles.emptyTitle}>No pets yet</Text>
-          <Text style={styles.emptySub}>Add your first pet to get started</Text>
-          <TouchableOpacity 
-            style={styles.addPetButton}
-            onPress={() => router.push('/create-pet')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.addPetButtonText}>Add Pet</Text>
-          </TouchableOpacity>
+        <View style={styles.emptyPetWrap}>
+          <LinearGradient colors={['#FFF4E7', '#F2E0CD']} style={styles.emptyPetCard}>
+            <View style={styles.emptyPetIconWrap}>
+              <Ionicons name="paw" size={42} color={Colors.primary.brown} />
+            </View>
+            <Text style={styles.emptyTitle}>No pets yet</Text>
+            <Text style={styles.emptySub}>Add your first pet to unlock reminders, health logs, and daily care tools.</Text>
+            <TouchableOpacity
+              style={styles.addPetButton}
+              onPress={() => router.push('/create-pet')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.addPetButtonText}>Add Your First Pet</Text>
+            </TouchableOpacity>
+          </LinearGradient>
         </View>
       ) : (
         <>
-          {/* Dynamic Greeting Card */}
-          <TouchableOpacity style={styles.greetingCard} activeOpacity={0.9}>
-            <View style={styles.greetingTextContainer}>
-              <Text style={styles.greetingTitle}>{greeting.title},</Text>
-              <Text style={styles.ownerName}>{activePet?.name || 'Buddy'} 🐾</Text>
+          <LinearGradient
+            colors={['#F6E7D8', '#EEDFD1']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroCard}
+          >
+            <View style={styles.heroTopRow}>
+              <View style={[styles.greetingBadge, { backgroundColor: greeting.accent }]}>
+                <Ionicons name={greeting.icon} size={16} color={Colors.primary.brown} />
+                <Text style={styles.greetingBadgeText}>{greeting.title}</Text>
+              </View>
+              <TouchableOpacity style={styles.heroCalendarButton} onPress={() => router.push('/activity')}>
+                <Ionicons name="calendar-outline" size={18} color={Colors.primary.brown} />
+              </TouchableOpacity>
             </View>
-            <View style={styles.avatarContainer}>
-              <Image source={{ uri: activePet?.avatar }} style={styles.largeAvatar} />
-            </View>
-          </TouchableOpacity>
 
-          {/* Upcoming Section */}
+            <Text style={styles.heroTitle}>How is {activePet?.name} doing today?</Text>
+            <Text style={styles.heroSubtitle}>
+              Keep routines steady, stay ahead of reminders, and log the basics in a few taps.
+            </Text>
+
+            <View style={styles.heroBottomRow}>
+              <Image source={{ uri: activePet?.avatar }} style={styles.largeAvatar} />
+              <View style={styles.heroBottomText}>
+                <Text style={styles.heroHighlightLabel}>Next up</Text>
+                <Text style={styles.heroHighlightValue}>
+                  {loading
+                    ? 'Loading reminders...'
+                    : nextReminder
+                      ? nextReminder.title
+                      : 'Nothing urgent right now'}
+                </Text>
+                <Text style={styles.heroHighlightMeta}>
+                  {nextReminder
+                    ? `${new Date(nextReminder.next_trigger_at).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                      })} • ${new Date(nextReminder.next_trigger_at).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      })}`
+                    : 'A calm day is a good day.'}
+                </Text>
+              </View>
+            </View>
+          </LinearGradient>
+
+          <View style={styles.summaryStrip}>
+            <View style={styles.summaryChip}>
+              <Text style={styles.summaryValue}>{upcomingReminders.length}</Text>
+              <Text style={styles.summaryLabel}>Upcoming</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryChip}>
+              <Text style={styles.summaryValue}>{QUICK_ACTIONS.length}</Text>
+              <Text style={styles.summaryLabel}>Quick logs</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <TouchableOpacity style={styles.summaryChip} onPress={() => router.push('/health')}>
+              <Text style={styles.summaryValue}>Health</Text>
+              <Text style={styles.summaryLabel}>Open dashboard</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Upcoming for {activePet?.name}</Text>
-            <TouchableOpacity onPress={() => router.push('/activity')}><Text style={styles.seeAllText}>Calendar ›</Text></TouchableOpacity>
+            <View>
+              <Text style={styles.sectionEyebrow}>Today&apos;s flow</Text>
+              <Text style={styles.sectionTitle}>Upcoming for {activePet?.name}</Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/activity')}>
+              <Text style={styles.seeAllText}>Open calendar</Text>
+            </TouchableOpacity>
           </View>
 
           {loading ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>Loading...</Text>
+            <View style={styles.loadingCard}>
+              <Text style={styles.emptyText}>Loading reminders...</Text>
             </View>
           ) : upcomingReminders.length === 0 ? (
-            <TouchableOpacity 
-              style={styles.emptyReminderCard} 
+            <TouchableOpacity
+              style={styles.emptyReminderCard}
               onPress={() => router.push('/activity')}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
-              <Ionicons name="calendar-outline" size={32} color={Colors.neutral.textLight} />
-              <Text style={styles.emptyTitle}>Nothing to do today</Text>
-              <Text style={styles.emptySub}>Tap to add a reminder</Text>
+              <View style={styles.emptyReminderIcon}>
+                <Ionicons name="sparkles-outline" size={24} color={Colors.primary.brown} />
+              </View>
+              <Text style={styles.emptyTitle}>Nothing scheduled right now</Text>
+              <Text style={styles.emptySub}>It looks like {activePet?.name} has a quiet day. Add a reminder anytime.</Text>
             </TouchableOpacity>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
               {upcomingReminders.map((reminder) => {
                 const config = REMINDER_TYPE_CONFIG[reminder.type] || REMINDER_TYPE_CONFIG.custom;
                 const triggerDate = new Date(reminder.next_trigger_at);
-                const timeStr = triggerDate.toLocaleTimeString('en-US', { 
-                  hour: 'numeric', 
-                  minute: '2-digit', 
-                  hour12: true 
+                const timeStr = triggerDate.toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true,
                 });
-                
+
                 return (
                   <TouchableOpacity
                     key={reminder.id}
-                    style={[styles.reminderCard, { backgroundColor: config.bgColor }]}
+                    style={[styles.reminderCard, { backgroundColor: config.softColor }]}
                     onPress={() => {
-                      // Navigate to activity screen with the specific date
                       router.push({
                         pathname: '/activity',
-                        params: { 
+                        params: {
                           selectedDate: triggerDate.toISOString(),
-                          timestamp: Date.now().toString(), // Force re-render with unique timestamp
-                        }
+                          timestamp: Date.now().toString(),
+                        },
                       });
                     }}
-                    activeOpacity={0.7}
+                    activeOpacity={0.8}
                   >
-                    <View style={styles.reminderTop}>
-                      <Ionicons name={config.icon as any} size={20} color={config.color} />
+                    <View style={styles.reminderHeader}>
+                      <View style={[styles.reminderIconWrap, { backgroundColor: config.bgColor }]}>
+                        <Ionicons name={config.icon as any} size={18} color={config.color} />
+                      </View>
                       <Text style={[styles.reminderTime, { color: config.color }]}>{timeStr}</Text>
                     </View>
-                    <Text style={[styles.reminderTitle, { color: config.color }]} numberOfLines={1}>
+                    <Text style={styles.reminderTitle} numberOfLines={2}>
                       {reminder.title}
                     </Text>
-                    {reminder.recurrence_type && reminder.recurrence_type !== 'once' && typeof reminder.recurrence_type === 'string' && (
-                      <Text style={[styles.reminderSub, { color: config.color }]}>
-                        {reminder.recurrence_type.charAt(0).toUpperCase() + reminder.recurrence_type.slice(1)}
-                      </Text>
-                    )}
+                    <Text style={styles.reminderDate}>
+                      {triggerDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </Text>
+                    {reminder.recurrence_type && reminder.recurrence_type !== 'once' ? (
+                      <View style={styles.recurrencePill}>
+                        <Text style={styles.recurrenceText}>
+                          {reminder.recurrence_type.charAt(0).toUpperCase() + reminder.recurrence_type.slice(1)}
+                        </Text>
+                      </View>
+                    ) : null}
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
           )}
 
-          {/* Quick Log */}
-          <Text style={styles.sectionTitle}>Quick Log</Text>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionEyebrow}>Fast actions</Text>
+              <Text style={styles.sectionTitle}>Quick log</Text>
+            </View>
+          </View>
+
           <View style={styles.grid}>
-            {[{ icon: 'food-drumstick', label: 'Fed' }, { icon: 'water', label: 'Water' }, { icon: 'walk', label: 'Walk' }, { icon: 'pill', label: 'Meds' }].map((item, index) => (
-              <TouchableOpacity key={index} style={styles.actionBtn} onPress={() => Alert.alert("Logged", `${item.label} recorded for ${activePet?.name}!`)}>
-                <MaterialCommunityIcons name={item.icon as any} size={24} color={Colors.primary.brown} />
-                <Text style={styles.actionLabel}>{item.label}</Text>
+            {QUICK_ACTIONS.map((item) => (
+              <TouchableOpacity
+                key={item.label}
+                style={styles.actionBtn}
+                onPress={() => Alert.alert('Logged', `${item.label} recorded for ${activePet?.name}!`)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.actionIconWrap, { backgroundColor: item.tint }]}>
+                  <MaterialCommunityIcons name={item.icon as any} size={22} color={Colors.primary.brown} />
+                </View>
+                <View>
+                  <Text style={styles.actionLabel}>{item.label}</Text>
+                  <Text style={styles.actionSubtext}>Tap to record</Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -239,67 +319,317 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.neutral.background },
-  content: { padding: 20, paddingBottom: 120 },
-  greetingCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, marginBottom: 25, backgroundColor: '#fff', borderRadius: 24, elevation: 3 },
-  greetingTextContainer: { flex: 1 },
-  greetingTitle: { fontSize: 16, color: Colors.neutral.textLight },
-  ownerName: { fontSize: 22, fontWeight: '800', color: Colors.neutral.text, marginTop: 4 },
-  avatarContainer: { position: 'relative' },
-  largeAvatar: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: '#fff' },
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral.text },
-  seeAllText: { fontSize: 14, color: Colors.primary.orangeDark, fontWeight: '600' },
-  horizontalScroll: { marginBottom: 25 },
-  reminderCard: { width: 160, padding: 16, borderRadius: 20, marginRight: 15 },
-  reminderTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  reminderTime: { fontSize: 12, fontWeight: 'bold', opacity: 0.8 },
-  reminderTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
-  reminderSub: { fontSize: 12, opacity: 0.8 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 15 },
-  actionBtn: { width: '47%', backgroundColor: '#fff', padding: 15, borderRadius: 16, alignItems: 'center', flexDirection: 'row', gap: 10, elevation: 2 },
-  actionLabel: { fontWeight: '600', color: Colors.neutral.text },
-  emptyState: { 
-    alignItems: 'center', 
-    justifyContent: 'center', 
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F4ED',
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 120,
+  },
+  heroCard: {
+    borderRadius: 30,
+    padding: 22,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#E8D8C9',
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  greetingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  greetingBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.primary.brown,
+  },
+  heroCalendarButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroTitle: {
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 8,
+    maxWidth: '92%',
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#72645B',
+    marginBottom: 20,
+    maxWidth: '92%',
+  },
+  heroBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  heroBottomText: {
+    flex: 1,
+  },
+  heroHighlightLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    color: Colors.neutral.textLight,
+    marginBottom: 6,
+  },
+  heroHighlightValue: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 6,
+  },
+  heroHighlightMeta: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.neutral.textLight,
+  },
+  largeAvatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    backgroundColor: '#E8DDD2',
+  },
+  summaryStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F4ECE3',
+    borderRadius: 24,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    marginBottom: 22,
+    borderWidth: 1,
+    borderColor: '#E8DCCF',
+  },
+  summaryChip: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 4,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.neutral.textLight,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#DDD0C2',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginBottom: 14,
+  },
+  sectionEyebrow: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: Colors.primary.orangeDark,
+    marginBottom: 4,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.neutral.text,
+  },
+  seeAllText: {
+    fontSize: 14,
+    color: Colors.primary.brown,
+    fontWeight: '700',
+  },
+  horizontalScroll: {
+    marginBottom: 26,
+  },
+  reminderCard: {
+    width: 196,
+    padding: 16,
+    borderRadius: 24,
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: '#E9DDD1',
+  },
+  reminderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  reminderIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reminderTime: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  reminderTitle: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 8,
+  },
+  reminderDate: {
+    fontSize: 13,
+    color: Colors.neutral.textLight,
+    marginBottom: 10,
+  },
+  recurrencePill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  recurrenceText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.primary.brown,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 14,
+  },
+  actionBtn: {
+    width: '47.5%',
+    backgroundColor: '#FBF7F2',
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#E9DED2',
+  },
+  actionIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionLabel: {
+    fontWeight: '700',
+    fontSize: 15,
+    color: Colors.neutral.text,
+    marginBottom: 2,
+  },
+  actionSubtext: {
+    fontSize: 12,
+    color: Colors.neutral.textLight,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 30,
   },
-  emptyText: { 
-    fontSize: 14, 
+  loadingCard: {
+    backgroundColor: '#FFF9F3',
+    borderRadius: 22,
+    paddingVertical: 26,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    marginBottom: 26,
+  },
+  emptyText: {
+    fontSize: 14,
     color: Colors.neutral.textLight,
   },
-  emptyReminderCard: { 
-    backgroundColor: '#fff', 
-    padding: 30, 
-    borderRadius: 20, 
-    alignItems: 'center', 
+  emptyPetWrap: {
+    paddingTop: 16,
+  },
+  emptyPetCard: {
+    borderRadius: 30,
+    padding: 24,
+    alignItems: 'center',
+  },
+  emptyPetIconWrap: {
+    width: 82,
+    height: 82,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.64)',
     justifyContent: 'center',
-    marginBottom: 25,
-    borderWidth: 2,
-    borderColor: Colors.neutral.border,
-    borderStyle: 'dashed',
+    alignItems: 'center',
+    marginBottom: 18,
   },
-  emptyTitle: { 
-    fontSize: 16, 
-    fontWeight: '600', 
+  emptyReminderCard: {
+    backgroundColor: '#FFF9F3',
+    padding: 24,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 26,
+    borderWidth: 1,
+    borderColor: '#EADCCC',
+  },
+  emptyReminderIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: '#F3E3D2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '800',
     color: Colors.neutral.text,
-    marginTop: 12,
+    marginTop: 2,
+    textAlign: 'center',
   },
-  emptySub: { 
-    fontSize: 14, 
+  emptySub: {
+    fontSize: 14,
+    lineHeight: 20,
     color: Colors.neutral.textLight,
-    marginTop: 4,
+    marginTop: 8,
+    textAlign: 'center',
   },
   addPetButton: {
-    backgroundColor: Colors.primary.orangeDark,
-    paddingVertical: 12,
+    backgroundColor: Colors.primary.brown,
+    paddingVertical: 14,
     paddingHorizontal: 24,
-    borderRadius: 16,
-    marginTop: 20,
+    borderRadius: 18,
+    marginTop: 22,
   },
   addPetButtonText: {
-    color: '#fff',
+    color: '#FFF9F2',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
