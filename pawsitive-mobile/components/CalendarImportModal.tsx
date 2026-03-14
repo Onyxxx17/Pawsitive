@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
-import * as Calendar from 'expo-calendar';
 import { supabase } from '@/lib/supabase';
 import {
   getUserCalendars,
@@ -26,7 +25,9 @@ interface CalendarImportModalProps {
   onImportComplete: (eventCount: number) => void;
 }
 
-interface CalendarWithSelection extends Calendar.Calendar {
+type DeviceCalendar = Awaited<ReturnType<typeof getUserCalendars>>[number];
+
+interface CalendarWithSelection extends DeviceCalendar {
   isSelected: boolean;
 }
 
@@ -39,13 +40,7 @@ export default function CalendarImportModal({
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
 
-  useEffect(() => {
-    if (visible) {
-      loadCalendars();
-    }
-  }, [visible]);
-
-  const loadCalendars = async () => {
+  const loadCalendars = useCallback(async () => {
     setLoading(true);
     try {
       const hasPermission = await requestCalendarPermissions();
@@ -67,7 +62,13 @@ export default function CalendarImportModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [onClose]);
+
+  useEffect(() => {
+    if (visible) {
+      loadCalendars();
+    }
+  }, [loadCalendars, visible]);
 
   const toggleCalendar = (calendarId: string) => {
     setCalendars(prev => prev.map(cal => 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
@@ -9,15 +9,26 @@ export default function LandingScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Logo/Header */}
+      <View style={styles.heroGlow} />
       <View style={styles.header}>
-        <Text style={styles.logo}>🐾 PAWSITIVE</Text>
-        <Text style={styles.tagline}>Your Pet's Health Companion</Text>
+        <View style={styles.logoBadge}>
+          <Ionicons name="paw" size={28} color={Colors.primary.orangeDark} />
+          <Text style={styles.logoWordmark}>PAWSITIVE</Text>
+        </View>
+        <Text style={styles.kicker}>Pet care that feels organized</Text>
+        <Text style={styles.tagline}>Track routines, health insights, and vet support in one place.</Text>
       </View>
 
-      {/* Illustration/Hero */}
       <View style={styles.heroSection}>
-        <Ionicons name="paw" size={100} color={Colors.primary.orange} />
+        <View style={styles.heroCard}>
+          <View style={styles.heroIcon}>
+            <Ionicons name="paw" size={58} color="#fff" />
+          </View>
+          <Text style={styles.heroTitle}>Choose your workspace</Text>
+          <Text style={styles.heroDescription}>
+            Owner tools stay focused on daily care. Vet tools stay focused on appointments and follow-up.
+          </Text>
+        </View>
       </View>
 
       {/* Login Options */}
@@ -36,7 +47,7 @@ export default function LandingScreen() {
             </View>
             <View style={styles.buttonText}>
               <Text style={styles.buttonTitle}>Pet Owner</Text>
-              <Text style={styles.buttonSubtitle}>Manage your pet's health</Text>
+              <Text style={styles.buttonSubtitle}>Manage your pet&apos;s health</Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color={Colors.primary.brown} />
           </View>
@@ -64,7 +75,7 @@ export default function LandingScreen() {
       {/* Footer */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Text style={styles.signupLink} onPress={() => router.push('/signup')}>
             Sign up
           </Text>
@@ -77,56 +88,115 @@ export default function LandingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.neutral.background,
-  },
-  header: {
-    alignItems: 'center',
-    marginTop: 80,
-    marginBottom: 40,
-  },
-  logo: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: Colors.primary.brown,
-    marginBottom: 8,
-  },
-  tagline: {
-    fontSize: 16,
-    color: Colors.neutral.textLight,
-    fontWeight: '500',
-  },
-  heroSection: {
-    alignItems: 'center',
-    marginBottom: 60,
-  },
-  optionsContainer: {
+    backgroundColor: '#F8F4ED',
     paddingHorizontal: 24,
   },
-  title: {
+  heroGlow: {
+    position: 'absolute',
+    top: 0,
+    right: -40,
+    width: 220,
+    height: 220,
+    borderRadius: 999,
+    backgroundColor: '#F5B27A55',
+  },
+  header: {
+    marginTop: 76,
+    marginBottom: 28,
+  },
+  logoBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFF7EE',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#F1D2AD',
+  },
+  logoWordmark: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.primary.brown,
+    letterSpacing: 1.2,
+  },
+  kicker: {
+    marginTop: 22,
+    fontSize: 14,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+    color: Colors.primary.orangeDark,
+  },
+  tagline: {
+    marginTop: 10,
+    fontSize: 32,
+    lineHeight: 38,
+    color: Colors.primary.brown,
+    fontWeight: '800',
+    maxWidth: '92%',
+  },
+  heroSection: {
+    marginBottom: 28,
+  },
+  heroCard: {
+    backgroundColor: Colors.primary.brown,
+    borderRadius: 28,
+    padding: 24,
+    shadowColor: '#7A4B24',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  heroIcon: {
+    width: 76,
+    height: 76,
+    borderRadius: 24,
+    backgroundColor: Colors.primary.orangeDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  heroTitle: {
     fontSize: 24,
+    fontWeight: '800',
+    color: '#FFF9F2',
+    marginBottom: 8,
+  },
+  heroDescription: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(255,249,242,0.84)',
+  },
+  optionsContainer: {
+    gap: 14,
+  },
+  title: {
+    fontSize: 18,
     fontWeight: '700',
     color: Colors.primary.brown,
-    marginBottom: 24,
-    textAlign: 'center',
+    marginBottom: 2,
   },
   optionButton: {
     backgroundColor: '#FFF',
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 20,
-    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
     elevation: 3,
   },
   ownerButton: {
-    borderWidth: 2,
-    borderColor: Colors.primary.orange,
+    borderWidth: 1,
+    borderColor: '#F5C28D',
   },
   vetButton: {
-    borderWidth: 2,
-    borderColor: '#2196F3',
+    borderWidth: 1,
+    borderColor: '#B7D7F6',
   },
   buttonContent: {
     flexDirection: 'row',
@@ -135,14 +205,14 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 60,
     height: 60,
-    borderRadius: 30,
-    backgroundColor: '#FFE5E5',
+    borderRadius: 22,
+    backgroundColor: '#FFF1E2',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
   vetIconContainer: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#E9F4FF',
   },
   buttonText: {
     flex: 1,

@@ -85,7 +85,7 @@ export default function HelpScreen() {
   const handleContactPress = async (action: () => void) => {
     try {
       await action();
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Unable to open this option. Please try again.');
     }
   };
@@ -164,9 +164,9 @@ export default function HelpScreen() {
           <View style={styles.tipCard}>
             <Ionicons name="bulb-outline" size={24} color={Colors.primary.orange} />
             <View style={styles.tipContent}>
-              <Text style={styles.tipTitle}>Keep Your Pet's Info Updated</Text>
+              <Text style={styles.tipTitle}>{`Keep Your Pet's Info Updated`}</Text>
               <Text style={styles.tipText}>
-                Regular updates to weight, medications, and health conditions help us provide better insights!
+                {`Regular updates to weight, medications, and health conditions help us provide better insights!`}
               </Text>
             </View>
           </View>
@@ -184,7 +184,7 @@ export default function HelpScreen() {
             <View style={styles.tipContent}>
               <Text style={styles.tipTitle}>Enable Notifications</Text>
               <Text style={styles.tipText}>
-                Stay on top of your pet's care with reminders for feeding, medication, and vet appointments.
+                {`Stay on top of your pet's care with reminders for feeding, medication, and vet appointments.`}
               </Text>
             </View>
           </View>

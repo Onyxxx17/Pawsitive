@@ -1,11 +1,13 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Platform, Alert, Modal } from 'react-native';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { usePet } from '../../context/PetContext';
 import { supabase } from '@/lib/supabase';
+import NotificationPanel from '@/components/shared/NotificationPanel';
+import type { Pet } from '@/context/PetContext';
 
 // 🎨 Custom Header with Functional Dropdown and Sidebar
 const CustomHeader = () => {
@@ -13,6 +15,7 @@ const CustomHeader = () => {
   const { activePet, setActivePet, pets } = usePet();
   const [expanded, setExpanded] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [showNotifications, setShowNotifications] = React.useState(false);
 
   const handleLogout = async () => {
     setSidebarOpen(false);
@@ -37,9 +40,15 @@ const CustomHeader = () => {
     );
   };
 
-  const handleSelect = (pet: any) => {
+  const handleSelect = (pet: Pet) => {
     setActivePet(pet);
     setExpanded(false);
+  };
+
+  const navigateTo = (route: '/profile' | '/help') => {
+    setExpanded(false);
+    setSidebarOpen(false);
+    router.push(route);
   };
 
   return (
@@ -51,7 +60,7 @@ const CustomHeader = () => {
           </TouchableOpacity>
 
         {/* 🐾 Functional Dropdown */}
-        <View style={{ zIndex: 100 }}>
+        <View style={styles.petDropdownWrap}>
           <TouchableOpacity 
             style={styles.petDropdown} 
             onPress={() => setExpanded(!expanded)}
@@ -64,7 +73,7 @@ const CustomHeader = () => {
           {/* Dropdown Menu (Absolute Position) */}
           {expanded && (
             <View style={styles.dropdownMenu}>
-              {pets.map((pet: any) => (
+              {pets.map((pet) => (
                 <TouchableOpacity 
                   key={pet.id} 
                   style={styles.dropdownItem} 
@@ -84,7 +93,7 @@ const CustomHeader = () => {
           )}
         </View>
 
-        <TouchableOpacity style={styles.iconButton}>
+        <TouchableOpacity style={styles.headerActionButton} onPress={() => setShowNotifications(true)}>
           <Ionicons name="notifications-outline" size={26} color={Colors.primary.brown} />
           <View style={styles.badge} />
         </TouchableOpacity>
@@ -114,10 +123,7 @@ const CustomHeader = () => {
 
             {/* Menu Items */}
             <View style={styles.menuItems}>
-              <TouchableOpacity style={styles.menuItem} onPress={() => {
-                setSidebarOpen(false);
-                router.push('/profile');
-              }}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/profile')}>
                 <Ionicons name="person-outline" size={24} color={Colors.primary.brown} />
                 <Text style={styles.menuText}>Profile</Text>
               </TouchableOpacity>
@@ -130,13 +136,7 @@ const CustomHeader = () => {
                 <Text style={styles.menuText}>Settings</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem} onPress={() => {
-                console.log('Help & Support clicked');
-                setSidebarOpen(false);
-                setTimeout(() => {
-                  router.push('/help' as any);
-                }, 100);
-              }}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/help')}>
                 <Ionicons name="help-circle-outline" size={24} color={Colors.primary.brown} />
                 <Text style={styles.menuText}>Help & Support</Text>
               </TouchableOpacity>
@@ -151,24 +151,34 @@ const CustomHeader = () => {
           </View>
         </TouchableOpacity>
       </Modal>
+      <NotificationPanel visible={showNotifications} onClose={() => setShowNotifications(false)} />
     </>
   );
 };
 
 // 📸 The "Nicer" Featured Camera Button
-const CustomCVButton = ({ onPress }: any) => (
+const CustomCVButton = ({ onPress, isSelected }: { onPress?: () => void; isSelected: boolean }) => {
+  return (
   <TouchableOpacity
     style={styles.cameraButtonContainer}
     onPress={onPress}
     activeOpacity={0.9}
   >
-    <View style={styles.cameraButtonOuter}>
-        <MaterialCommunityIcons name="camera-iris" size={32} color="#FFF" />
+    <View style={[styles.cameraButtonOuter, isSelected && styles.cameraButtonOuterActive]}>
+        <MaterialCommunityIcons
+          name="camera-iris"
+          size={32}
+          color="#FFF"
+        />
     </View>
   </TouchableOpacity>
-);
+  );
+};
 
 export default function TabLayout() {
+  const pathname = usePathname();
+  const isCameraActive = pathname === '/camera';
+
   return (
     <Tabs
       screenOptions={{
@@ -198,14 +208,14 @@ export default function TabLayout() {
         name="camera"
         options={{
           title: '',
-          tabBarButton: (props) => <CustomCVButton {...props} />,
+          tabBarButton: ({ onPress }) => <CustomCVButton onPress={onPress} isSelected={isCameraActive} />,
         }}
       />
       <Tabs.Screen
         name="health"
         options={{
           title: 'Health',
-          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "heart" : "heart-outline"} size={28} color={color} />,
+          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "medkit" : "medkit-outline"} size={28} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -224,25 +234,27 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  headerContainer: { backgroundColor: Colors.neutral.background, borderBottomWidth: 1, borderBottomColor: Colors.neutral.border, zIndex: 999 },
-  headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 10, height: 60 },
+  headerContainer: { backgroundColor: '#F8F4ED', borderBottomWidth: 1, borderBottomColor: '#E9DDCD', zIndex: 999 },
+  headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12, paddingTop: 6, minHeight: 68 },
   
-  // Dropdown Styles
-  petDropdown: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#eee' },
-  petName: { fontSize: 16, fontWeight: '700', color: Colors.primary.brown, marginRight: 6 },
-  tinyAvatar: { width: 24, height: 24, borderRadius: 12, marginRight: 8 },
+  petDropdownWrap: { flex: 1, alignItems: 'center', zIndex: 100 },
+  petDropdown: { flexDirection: 'row', alignItems: 'center', maxWidth: '88%', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 22, borderWidth: 1, borderColor: '#EADCC9' },
+  petName: { fontSize: 15, fontWeight: '700', color: Colors.primary.brown, marginRight: 6 },
+  tinyAvatar: { width: 26, height: 26, borderRadius: 13, marginRight: 8 },
   
-  dropdownMenu: { position: 'absolute', top: 45, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 12, padding: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
+  dropdownMenu: { position: 'absolute', top: 48, left: 12, right: 12, backgroundColor: '#fff', borderRadius: 16, padding: 6, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, elevation: 5 },
   dropdownItem: { flexDirection: 'row', alignItems: 'center', padding: 10, borderBottomWidth: 0.5, borderBottomColor: '#eee' },
   dropdownText: { fontSize: 14, color: Colors.primary.brown, flex: 1 },
 
-  iconButton: { padding: 5 },
+  iconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EADCC9' },
+  headerActionButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EADCC9' },
   badge: { position: 'absolute', top: 5, right: 5, width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.health.poor },
 
   tabBar: { height: Platform.OS === 'ios' ? 90 : 70, backgroundColor: '#ffffff', borderTopWidth: 0, elevation: 8, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: -2 }, position: 'absolute', bottom: 0, paddingTop: 10 },
   
   cameraButtonContainer: { top: -25, justifyContent: 'center', alignItems: 'center' },
   cameraButtonOuter: { width: 64, height: 64, borderRadius: 32, backgroundColor: Colors.primary.orangeDark, justifyContent: 'center', alignItems: 'center', borderWidth: 4, borderColor: '#ffffff', shadowColor: Colors.primary.orangeDark, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 8 },
+  cameraButtonOuterActive: { backgroundColor: Colors.primary.brown, borderColor: '#FFF3E6', shadowColor: Colors.primary.brown },
 
   // Sidebar Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-start' },
