@@ -7,12 +7,18 @@ import Button from '@/components/ui/Button';
 
 export function AnalysisResult({
   analysisResult,
+  onSaveResults,
+  saveTitle,
+  saveDisabled,
   onRescan,
   uploadedImages,
 }: {
   analysisResult: {
     results: { analysisType: string; result: Record<string, string> }[];
   };
+  onSaveResults: () => void;
+  saveTitle: string;
+  saveDisabled: boolean;
   onRescan: () => void;
   uploadedImages: Record<string, string>;
 }) {
@@ -41,6 +47,12 @@ export function AnalysisResult({
         ))}
       </ScrollView>
 
+      <Button
+        onPress={onSaveResults}
+        style={styles.saveButton}
+        title={saveTitle}
+        disabled={saveDisabled}
+      />
       <Button onPress={onRescan} style={styles.rescanButton} title="Start a new scan" />
     </View>
   );
@@ -84,8 +96,12 @@ const styles = StyleSheet.create({
   resultContent: {
     borderRadius: 20,
   },
-  rescanButton: {
+  saveButton: {
     marginTop: 16,
+    backgroundColor: Colors.primary.orangeDark,
+  },
+  rescanButton: {
+    marginTop: 10,
     backgroundColor: Colors.primary.brown,
   },
 });

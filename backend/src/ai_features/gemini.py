@@ -21,28 +21,45 @@ dotenv.load_dotenv()
 # 1. Initialize the Client with your API Key
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
+PREFERRED_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro",
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
+    "gemini-3-pro-preview",
+]
+
+
+def _generate_with_fallback(contents, system_instruction, models=None):
+    candidate_models = models or PREFERRED_MODELS
+    last_error = None
+
+    for model in candidate_models:
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(system_instruction=system_instruction)
+            )
+            if getattr(response, "text", None):
+                return response.text
+        except Exception as e:
+            last_error = e
+            print(f"Model {model} failed with error: {e}")
+
+    if last_error:
+        raise RuntimeError(f"All models failed to process the request: {last_error}")
+    raise RuntimeError("All models failed to process the request.")
+
 def analyze_pet_photo(image_parts, prompt_key):
     image = types.Part.from_bytes(
             data=image_parts['data'],
             mime_type=image_parts['mime_type']
         )
     system_instruction = SYSTEM_PROMPTS[prompt_key]
-
-    # List of models to try in order of preference
-    models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3-pro-preview"]
-
-    for model in models:
-        try:
-            response = client.models.generate_content(
-                model=model,
-                contents=[image, system_instruction],
-                config=types.GenerateContentConfig(system_instruction=system_instruction)
-            )
-            return format_json(response.text)  # Return result if successful
-        except Exception as e:
-            print(f"Model {model} failed with error: {e}")
-
-    raise RuntimeError("All models failed to process the request.")
+    response_text = _generate_with_fallback([image, system_instruction], system_instruction)
+    return format_json(response_text)
 
 def analyze_pet_poop(image_parts):
     result = analyze_pet_photo(image_parts, "poop_analysis")
@@ -84,17 +101,51 @@ def reformat_json(result):
 def process_message(message):
     """Use Gemini to process user message and generate response"""
     try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=[message],
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPTS["process_message"]
-            )
-        ).text
+        response = _generate_with_fallback(
+            [message],
+            SYSTEM_PROMPTS["process_message"],
+            models=["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
+        )
     except Exception as e:
         response = str(e)
 
     return response
+
+
+def generate_health_history_insights(payload):
+    """
+    Generate historical health insights and Q&A from saved checks/logs.
+    Expected payload keys: pet_name, checks, logs, question.
+    """
+    pet_name = (payload.get("pet_name") or "your pet").strip() or "your pet"
+    checks = payload.get("checks") or []
+    logs = payload.get("logs") or []
+    question = (payload.get("question") or "").strip()
+
+    data_blob = json.dumps(
+        {
+            "pet_name": pet_name,
+            "checks": checks,
+            "logs": logs,
+        },
+        default=str,
+        ensure_ascii=True,
+    )
+
+    question_line = question if question else "No direct question provided. Summarize key trends and action items."
+    user_message = (
+        f"Pet name: {pet_name}\n"
+        f"User question: {question_line}\n"
+        "Historical health data (JSON):\n"
+        f"{data_blob}\n"
+        "Write clear plain text for a pet owner. Avoid medical diagnosis."
+    )
+
+    return _generate_with_fallback(
+        [user_message],
+        SYSTEM_PROMPTS["health_history_insights"],
+        models=["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"],
+    )
 
 # def main():
 #     poop_photo_path = "assets/images/pet_poop.jpg"
