@@ -12,9 +12,28 @@ export default function SignUpScreen() {
   const [ownerName, setOwnerName] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const isAlreadyRegisteredError = (error: any) => {
+    const message = String(error?.message || '').toLowerCase();
+    const code = String(error?.code || error?.error_code || '').toLowerCase();
+    return code === 'user_already_exists' || message.includes('already registered');
+  };
+
   const handleSignUp = async () => {
     if (!email || !password || !ownerName) {
       Alert.alert("Missing Info", "Please fill in all fields.");
+      return;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedOwnerName = ownerName.trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      Alert.alert("Invalid Email", "Please enter a valid email address.");
+      return;
+    }
+
+    if (!normalizedOwnerName) {
+      Alert.alert("Missing Info", "Please enter your name.");
       return;
     }
 
@@ -25,17 +44,28 @@ export default function SignUpScreen() {
 
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
+      email: normalizedEmail,
       password,
       options: {
         data: {
-          full_name: ownerName,
+          full_name: normalizedOwnerName,
         }
       }
     });
     setLoading(false);
 
     if (error) {
+      if (isAlreadyRegisteredError(error)) {
+        Alert.alert(
+          "Account already exists",
+          "That email is already registered. Log in instead?",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Go to Login", onPress: () => router.replace('/login') },
+          ]
+        );
+        return;
+      }
       Alert.alert("Sign Up Failed", error.message);
     } else if (data.user) {
       Alert.alert("Success!", "Account created! Please log in.", [

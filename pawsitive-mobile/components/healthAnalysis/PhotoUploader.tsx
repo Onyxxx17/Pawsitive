@@ -114,8 +114,9 @@ export function PhotoUploader({
     setLoading(true);
     try {
       await onAllImagesSelected(uploadedImages);
-    } catch {
-      Alert.alert('Error', 'An error occurred while sending the photos.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'An error occurred while sending the photos.';
+      Alert.alert('Error', message);
     } finally {
       setLoading(false);
     }
