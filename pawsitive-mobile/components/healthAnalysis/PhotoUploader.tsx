@@ -1,4 +1,4 @@
-import React, { Dispatch, SetStateAction } from 'react';
+import React, { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,45 +9,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { AnnotatedCaptureImage } from '@/components/healthAnalysis/AnnotatedCaptureImage';
 import { Colors } from '@/constants/Colors';
+import { GuidedCaptureModal } from '@/components/healthAnalysis/GuidedCaptureModal';
+import { AnalysisType, SCAN_GUIDES } from '@/constants/scanGuides';
+import { QualityGateResult, validateScanImageLocally } from '@/utils/scanQuality';
 
-const analysisCards = [
-  {
-    key: 'mood_analysis',
-    title: 'Mood Scan',
-    icon: 'happy-outline' as const,
-    note: 'Capture the face clearly with both eyes visible.',
-    accent: '#FFE7BE',
-  },
-  {
-    key: 'coat_and_body_condition',
-    title: 'Coat and Body',
-    icon: 'sparkles-outline' as const,
-    note: 'Use a side or full-body photo in soft lighting.',
-    accent: '#F7D2C7',
-  },
-  {
-    key: 'teeth_and_gums',
-    title: 'Teeth and Gums',
-    icon: 'medical-outline' as const,
-    note: 'Zoom in closely so the gums and teeth are easy to inspect.',
-    accent: '#F9E1D0',
-  },
-  {
-    key: 'poop_analysis',
-    title: 'Poop Check',
-    icon: 'leaf-outline' as const,
-    note: 'Frame the sample directly from above when possible.',
-    accent: '#E8D8BE',
-  },
-  {
-    key: 'body_weight',
-    title: 'Body Weight',
-    icon: 'barbell-outline' as const,
-    note: 'Use a side or top view with the full torso visible.',
-    accent: '#EADCD0',
-  },
-];
+const analysisCards = SCAN_GUIDES;
 
 export function PhotoUploader({
   onAllImagesSelected,
@@ -64,30 +32,60 @@ export function PhotoUploader({
 }) {
   const completedCount = Object.keys(uploadedImages).length;
   const progress = completedCount / analysisCards.length;
+  const [captureTarget, setCaptureTarget] = useState<AnalysisType | null>(null);
+  const [captureVisible, setCaptureVisible] = useState(false);
+  const [qualityByAnalysis, setQualityByAnalysis] = useState<Partial<Record<AnalysisType, QualityGateResult>>>({});
 
-  const handleImageSelected = (analysis: string, uri: string) => {
-    setUploadedImages((prev) => ({ ...prev, [analysis]: uri }));
-  };
+  useEffect(() => {
+    const pendingAnalyses = Object.entries(uploadedImages).filter(
+      ([analysis, uri]) => uri && !qualityByAnalysis[analysis as AnalysisType],
+    ) as [AnalysisType, string][];
 
-  const openCamera = async (analysis: string) => {
-    const { granted } = await ImagePicker.requestCameraPermissionsAsync();
-    if (!granted) {
-      Alert.alert('Permission Required', 'Camera access is needed.');
+    if (pendingAnalyses.length === 0) {
       return;
     }
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.8,
-    });
+    let cancelled = false;
 
-    if (!result.canceled) {
-      handleImageSelected(analysis, result.assets[0].uri);
-    }
+    (async () => {
+      const validatedEntries = await Promise.all(
+        pendingAnalyses.map(async ([analysis, uri]) => [
+          analysis,
+          await validateScanImageLocally(analysis, uri),
+        ] as const),
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      setQualityByAnalysis((previous) => {
+        const next = { ...previous };
+
+        validatedEntries.forEach(([analysis, quality]) => {
+          next[analysis] = quality;
+        });
+
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [qualityByAnalysis, uploadedImages]);
+
+  const handleImageSelected = (analysis: AnalysisType, uri: string, quality: QualityGateResult) => {
+    setUploadedImages((prev) => ({ ...prev, [analysis]: uri }));
+    setQualityByAnalysis((prev) => ({ ...prev, [analysis]: quality }));
   };
 
-  const pickImage = async (analysis: string) => {
+  const handleGuidedCaptureOpen = (analysis: AnalysisType) => {
+    setCaptureTarget(analysis);
+    setCaptureVisible(true);
+  };
+
+  const pickImage = async (analysis: AnalysisType) => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!granted) {
       Alert.alert('Permission Required', 'Gallery access is needed.');
@@ -101,7 +99,19 @@ export function PhotoUploader({
     });
 
     if (!result.canceled) {
-      handleImageSelected(analysis, result.assets[0].uri);
+      const uri = result.assets[0].uri;
+      const quality = await validateScanImageLocally(analysis, uri);
+
+      if (quality.status === 'block') {
+        Alert.alert(quality.label, quality.summary);
+        return;
+      }
+
+      handleImageSelected(analysis, uri, quality);
+
+      if (quality.status === 'warn') {
+        Alert.alert(quality.label, quality.summary);
+      }
     }
   };
 
@@ -140,6 +150,19 @@ export function PhotoUploader({
       {analysisCards.map((card, index) => {
         const imageUri = uploadedImages[card.key];
         const ready = Boolean(imageUri);
+        const quality = qualityByAnalysis[card.key];
+        const qualityTone =
+          quality?.status === 'pass'
+            ? '#2B8A5A'
+            : quality?.status === 'warn'
+              ? '#9A6A16'
+              : Colors.primary.brown;
+        const qualityIcon =
+          quality?.status === 'pass'
+            ? 'checkmark-circle'
+            : quality?.status === 'warn'
+              ? 'warning'
+              : 'checkmark-circle';
 
         return (
           <View key={card.key} style={styles.analysisCard}>
@@ -160,26 +183,68 @@ export function PhotoUploader({
 
             <Text style={styles.analysisNote}>{card.note}</Text>
 
-            {imageUri ? (
-              <View style={styles.previewPanel}>
-                <Image source={{ uri: imageUri }} style={styles.imagePreview} />
-                <View style={styles.previewMeta}>
-                  <Ionicons name="checkmark-circle" size={18} color="#2B8A5A" />
-                  <Text style={styles.previewMetaText}>Photo selected and ready for analysis</Text>
+            <View style={[styles.referencePanel, { backgroundColor: card.accent }]}>
+              <View style={styles.referenceHeader}>
+                <View>
+                  <Text style={styles.referenceEyebrow}>Doge Guide</Text>
+                  <Text style={styles.referenceTitle}>Suggested vs your upload</Text>
+                </View>
+                <Ionicons name="sparkles-outline" size={18} color={Colors.primary.brown} />
+              </View>
+              <View style={styles.comparisonRow}>
+                <View style={styles.comparisonColumn}>
+                  <Text style={styles.comparisonLabel}>Suggested image</Text>
+                  <View style={styles.comparisonFrame}>
+                    <Image
+                      source={card.referenceImage}
+                      style={styles.comparisonImage}
+                      resizeMode="contain"
+                      accessibilityLabel={`${card.title} Doge reference`}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.comparisonColumn}>
+                  <Text style={styles.comparisonLabel}>Your upload</Text>
+                  {imageUri ? (
+                    <View style={styles.comparisonFrame}>
+                      <AnnotatedCaptureImage
+                        uri={imageUri}
+                        quality={quality}
+                        style={styles.comparisonImage}
+                        accessibilityLabel={`${card.title} uploaded image`}
+                      />
+                    </View>
+                  ) : (
+                    <View style={[styles.comparisonFrame, styles.emptyComparisonFrame]}>
+                      <Ionicons name="image-outline" size={26} color={Colors.neutral.textLight} />
+                      <Text style={styles.emptyPreviewTitle}>No photo yet</Text>
+                      <Text style={styles.emptyPreviewText}>Take or upload a photo to compare it here.</Text>
+                    </View>
+                  )}
                 </View>
               </View>
-            ) : (
-              <View style={styles.emptyPreview}>
-                <Ionicons name="image-outline" size={28} color={Colors.neutral.textLight} />
-                <Text style={styles.emptyPreviewTitle}>No photo added yet</Text>
-                <Text style={styles.emptyPreviewText}>Use the camera for the best guided capture.</Text>
-              </View>
-            )}
+              <Text style={styles.referenceText}>{card.referenceText}</Text>
+
+              {imageUri ? (
+                <View style={styles.previewMeta}>
+                  <Ionicons name={qualityIcon} size={18} color={qualityTone} />
+                  <View style={styles.previewMetaCopy}>
+                    <Text style={[styles.previewMetaText, { color: qualityTone }]}>
+                      {quality?.label || 'Photo selected and ready for analysis'}
+                    </Text>
+                    <Text style={styles.previewSummaryText}>
+                      {quality?.summary || 'Photo selected and ready for analysis.'}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+            </View>
 
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.actionButton, styles.primaryAction, loading && styles.actionDisabled]}
-                onPress={() => openCamera(card.key)}
+                onPress={() => handleGuidedCaptureOpen(card.key)}
                 disabled={loading}
               >
                 <Ionicons name="camera-outline" size={18} color="#FFF9F2" />
@@ -207,6 +272,19 @@ export function PhotoUploader({
         <Text style={styles.submitTitle}>{loading ? 'Submitting scans...' : 'Analyze all scans'}</Text>
         <Text style={styles.submitSubtitle}>Send the full photo set in one batch.</Text>
       </TouchableOpacity>
+
+      <GuidedCaptureModal
+        visible={captureVisible}
+        analysisType={captureTarget}
+        onClose={() => {
+          setCaptureVisible(false);
+          setCaptureTarget(null);
+        }}
+        onAccept={({ uri, quality }) => {
+          if (!captureTarget) return;
+          handleImageSelected(captureTarget, uri, quality);
+        }}
+      />
     </View>
   );
 }
@@ -321,44 +399,98 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: Colors.neutral.textLight,
   },
-  previewPanel: {
+  referencePanel: {
     marginTop: 16,
-    backgroundColor: '#FCF6F0',
-    borderRadius: 20,
-    padding: 12,
+    borderRadius: 22,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(67,55,47,0.08)',
   },
-  imagePreview: {
+  referenceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  referenceEyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: 'rgba(67,55,47,0.68)',
+    marginBottom: 4,
+  },
+  referenceTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+  },
+  comparisonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  comparisonColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
+  comparisonLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6C5A4E',
+    marginBottom: 8,
+  },
+  comparisonFrame: {
+    height: 190,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderRadius: 18,
+    padding: 10,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  comparisonImage: {
     width: '100%',
-    height: 180,
-    borderRadius: 16,
-    marginBottom: 10,
+    height: '100%',
+  },
+  emptyComparisonFrame: {
+    borderWidth: 1,
+    borderColor: '#E9DDD1',
+    borderStyle: 'dashed',
+  },
+  referenceText: {
+    marginTop: 12,
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#5D5148',
   },
   previewMeta: {
+    marginTop: 12,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
+  },
+  previewMetaCopy: {
+    flex: 1,
   },
   previewMetaText: {
     fontSize: 13,
     fontWeight: '600',
     color: Colors.primary.brown,
   },
-  emptyPreview: {
-    marginTop: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E9DDD1',
-    borderStyle: 'dashed',
-    paddingVertical: 22,
-    paddingHorizontal: 18,
-    alignItems: 'center',
-    backgroundColor: '#FCF8F4',
+  previewSummaryText: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 17,
+    color: Colors.neutral.textLight,
+    fontWeight: '500',
   },
   emptyPreviewTitle: {
-    marginTop: 10,
+    marginTop: 8,
     fontSize: 15,
     fontWeight: '700',
     color: Colors.primary.brown,
+    textAlign: 'center',
   },
   emptyPreviewText: {
     marginTop: 6,

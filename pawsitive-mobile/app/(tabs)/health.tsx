@@ -51,16 +51,61 @@ const formatTrendDelta = (delta: number | null, unitLabel: string) => {
   return `${sign}${delta.toFixed(1)} ${unitLabel} vs previous`;
 };
 
-const MiniTrendBars = ({ values, color }: { values: number[]; color: string }) => {
+const getTrendScoreStatus = (score: number | null) => {
+  if (score == null) {
+    return {
+      label: 'No score yet',
+      tone: '#8B7D72',
+      tint: '#EFE6DC',
+      note: 'Save at least one scan to assess this condition.',
+    };
+  }
+
+  if (score < 50) {
+    return {
+      label: 'Vet review',
+      tone: '#A14637',
+      tint: '#FBE2DC',
+      note: 'This score is low enough to justify a professional review soon.',
+    };
+  }
+
+  if (score < 75) {
+    return {
+      label: 'Needs monitoring',
+      tone: '#9A6A16',
+      tint: '#FFF0C9',
+      note: 'Keep tracking this condition closely over the next few checks.',
+    };
+  }
+
+  return {
+    label: 'Steady',
+    tone: '#2B8A5A',
+    tint: '#E6F5EB',
+    note: 'Recent scores look stable for this condition.',
+  };
+};
+
+const MiniTrendBars = ({
+  values,
+  color,
+  maxScale,
+}: {
+  values: number[];
+  color: string;
+  maxScale?: number;
+}) => {
   if (!values.length) {
     return <Text style={styles.trendEmptyText}>No trend data yet</Text>;
   }
 
-  const maxValue = Math.max(...values, 1);
+  const maxValue = Math.max(maxScale ?? Math.max(...values, 1), 1);
   return (
     <View style={styles.trendBars}>
       {values.map((value, index) => {
-        const heightPercent = Math.max(12, (value / maxValue) * 100);
+        const boundedValue = Math.max(0, Math.min(value, maxValue));
+        const heightPercent = Math.max(12, (boundedValue / maxValue) * 100);
         return (
           <View key={`${index}-${value}`} style={styles.trendBarTrack}>
             <View
@@ -397,6 +442,7 @@ export default function HealthScreen() {
         const latest = values.length > 0 ? values[values.length - 1] : null;
         const previous = values.length > 1 ? values[values.length - 2] : null;
         const delta = latest != null && previous != null ? Number((latest - previous).toFixed(1)) : null;
+        const status = getTrendScoreStatus(latest);
 
         return {
           type,
@@ -406,6 +452,7 @@ export default function HealthScreen() {
           values,
           latest,
           delta,
+          status,
         };
       }),
     [healthChecks],
@@ -658,7 +705,9 @@ export default function HealthScreen() {
 
         <Text style={styles.sectionTitle}>Trend dashboard</Text>
         <Card style={styles.trendDashboardCard}>
-          <Text style={styles.trendDashboardSubtitle}>Past 30 days from saved scans and logs.</Text>
+          <Text style={styles.trendDashboardSubtitle}>
+            Past 30 days from saved scans and logs. Scan scores are plotted on a fixed 0-100 scale.
+          </Text>
 
           <View style={styles.scanTrendGrid}>
             {scanTrends.map((trend) => (
@@ -671,8 +720,12 @@ export default function HealthScreen() {
                     <Text style={styles.scanTrendLabel}>{trend.label}</Text>
                     <Text style={styles.scanTrendValue}>{trend.latest != null ? `${Math.round(trend.latest)}/100` : '--'}</Text>
                   </View>
+                  <View style={[styles.scanTrendStatusPill, { backgroundColor: trend.status.tint }]}>
+                    <Text style={[styles.scanTrendStatusText, { color: trend.status.tone }]}>{trend.status.label}</Text>
+                  </View>
                 </View>
-                <MiniTrendBars values={trend.values} color={trend.color} />
+                <MiniTrendBars values={trend.values} color={trend.color} maxScale={100} />
+                <Text style={styles.scanTrendNote}>{trend.status.note}</Text>
                 <Text style={styles.scanTrendDelta}>{formatTrendDelta(trend.delta, 'pts')}</Text>
               </View>
             ))}
@@ -1232,8 +1285,26 @@ const styles = StyleSheet.create({
     color: Colors.primary.brown,
     marginTop: 2,
   },
-  scanTrendDelta: {
+  scanTrendStatusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  scanTrendStatusText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  scanTrendNote: {
     marginTop: 10,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#6E6259',
+    fontWeight: '600',
+  },
+  scanTrendDelta: {
+    marginTop: 8,
     fontSize: 12,
     color: Colors.neutral.textLight,
     fontWeight: '600',
