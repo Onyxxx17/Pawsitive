@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,14 +15,179 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useNavigation, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { supabase } from '@/lib/supabase';
+import { usePet } from '@/context/PetContext';
 
 const initialMessages = [
-  { id: '1', text: "Woof! I'm PawPal 🐾\nAsk me anything about Mochi's health!", sender: 'bot' },
+  { id: '1', text: "Woof! I'm PawPal.\nAsk me anything about your pet's health!", sender: 'bot' },
 ];
+
+type PetProfileContext = {
+  id: string;
+  name: string;
+  species: string;
+  breed: string | null;
+  gender: string | null;
+  date_of_birth: string | null;
+  weight_kg: number | null;
+  profile_photo_url: string | null;
+  existing_conditions: string[] | null;
+  is_neutered: boolean | null;
+  microchip_id: string | null;
+  notes: string | null;
+  updated_at: string | null;
+};
+
+const buildStarterMessage = (petName?: string | null) => {
+  if (petName) {
+    return `Woof! I'm PawPal.\nAsk me anything about ${petName}'s health!`;
+  }
+
+  return "Woof! I'm PawPal.\nAsk me anything about your pet's health!";
+};
+
+type HealthCheckContext = {
+  id: string;
+  check_type: string;
+  score: number | null;
+  confidence: number | null;
+  status: string;
+  analysis_json: Record<string, unknown> | null;
+  image_url: string;
+  created_at: string;
+};
+
+type HealthLogContext = {
+  id: string;
+  log_type: string;
+  log_data: Record<string, unknown> | null;
+  logged_at: string;
+};
+
+const formatOwnerCheckSummary = (check: HealthCheckContext) => {
+  const scoreText = check.score != null ? `${Math.round(check.score)}/100` : 'no score';
+  const details =
+    typeof check.analysis_json?.feedback === 'string' && check.analysis_json.feedback.trim()
+      ? ` Notes: ${check.analysis_json.feedback.trim()}`
+      : '';
+  return `${check.check_type}: ${scoreText}.${details}`;
+};
+
+const buildOwnerContextSummary = ({
+  petProfile,
+  latestHealthScreenings,
+  latestHealthLogs,
+}: {
+  petProfile: PetProfileContext | null;
+  latestHealthScreenings: HealthCheckContext[];
+  latestHealthLogs: HealthLogContext[];
+}) => {
+  if (!petProfile) {
+    return 'No pet profile is currently available.';
+  }
+
+  const lines = [
+    `Selected pet name: ${petProfile.name}.`,
+    `Species: ${petProfile.species}.`,
+  ];
+
+  if (petProfile.breed) {
+    lines.push(`Breed: ${petProfile.breed}.`);
+  }
+
+  if (petProfile.weight_kg != null) {
+    lines.push(`Weight: ${petProfile.weight_kg} kg.`);
+  }
+
+  if (petProfile.gender) {
+    lines.push(`Gender: ${petProfile.gender}.`);
+  }
+
+  if (petProfile.existing_conditions?.length) {
+    lines.push(`Existing conditions: ${petProfile.existing_conditions.join(', ')}.`);
+  }
+
+  if (petProfile.notes) {
+    lines.push(`Profile notes: ${petProfile.notes}.`);
+  }
+
+  if (latestHealthScreenings.length) {
+    lines.push(
+      'Latest completed health screenings: '
+      + latestHealthScreenings
+        .slice(0, 5)
+        .map(formatOwnerCheckSummary)
+        .join(' '),
+    );
+  } else {
+    lines.push('No completed health screenings are saved yet.');
+  }
+
+  if (latestHealthLogs.length) {
+    const recentLogSummaries = latestHealthLogs.slice(0, 3).map((log) => {
+      const logData =
+        log.log_data && Object.keys(log.log_data).length > 0
+          ? JSON.stringify(log.log_data)
+          : 'no extra details';
+      return `${log.log_type} on ${new Date(log.logged_at).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })}: ${logData}`;
+    });
+    lines.push(`Recent health logs: ${recentLogSummaries.join(' ')}`);
+  }
+
+  return lines.join(' ');
+};
+
+const buildOwnerGroundedPrompt = (
+  question: string,
+  ownerContext: Record<string, unknown> | null,
+) => {
+  const contextSummary =
+    ownerContext && typeof ownerContext.context_summary === 'string'
+      ? ownerContext.context_summary.trim()
+      : '';
+
+  if (!contextSummary) {
+    return question;
+  }
+
+  return [
+    'Current pet context:',
+    contextSummary,
+    '',
+    `Owner question: ${question}`,
+    'Answer using the pet context above when it contains the needed facts.',
+  ].join('\n');
+};
+
+const extractTeleVetCta = (rawText: string) => {
+  const markerPattern = /\n?TELEVET_CTA:\s*true\s*$/i;
+  const showTeleVetCta = markerPattern.test(rawText) || /tele-vet support/i.test(rawText);
+  const text = rawText.replace(markerPattern, '').trim();
+  return {
+    text,
+    showTeleVetCta,
+  };
+};
+
+type ChatMessage = {
+  id: string;
+  text: string;
+  sender: 'bot' | 'user';
+  showTeleVetCta?: boolean;
+};
 
 export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState(initialMessages);
+  const { activePet } = usePet();
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
+    {
+      ...initialMessages[0],
+      text: buildStarterMessage(activePet?.id && activePet.id !== 'default' ? activePet.name : null),
+    },
+  ]);
   const [isSending, setIsSending] = useState(false);
   const navigation = useNavigation();
   const router = useRouter();
@@ -55,6 +220,98 @@ export default function ChatScreen() {
     };
   }, [navigation]);
 
+  useEffect(() => {
+    const starterText = buildStarterMessage(
+      activePet?.id && activePet.id !== 'default' ? activePet.name : null,
+    );
+
+    setMessages((current) => {
+      if (current.length === 1 && current[0]?.id === '1') {
+        return [{ ...current[0], text: starterText }];
+      }
+
+      return current;
+    });
+  }, [activePet?.id, activePet?.name]);
+
+  const buildOwnerChatContext = useCallback(async () => {
+    if (!activePet?.id || activePet.id === 'default') {
+      return {
+        active_pet_id: null,
+        active_pet_name: activePet?.name ?? null,
+        pet_profile: null,
+        latest_health_screenings: [],
+        latest_health_logs: [],
+        latest_screenings_by_type: {},
+        context_summary: 'No active pet is currently selected.',
+        context_note: 'No active pet is currently selected.',
+      };
+    }
+
+    const [petResult, healthChecksResult, healthLogsResult] = await Promise.all([
+      supabase
+        .from('pets')
+        .select(
+          'id, name, species, breed, gender, date_of_birth, weight_kg, profile_photo_url, existing_conditions, is_neutered, microchip_id, notes, updated_at',
+        )
+        .eq('id', activePet.id)
+        .single<PetProfileContext>(),
+      supabase
+        .from('health_checks')
+        .select('id, check_type, score, confidence, status, analysis_json, image_url, created_at')
+        .eq('pet_id', activePet.id)
+        .eq('status', 'complete')
+        .order('created_at', { ascending: false })
+        .limit(12),
+      supabase
+        .from('health_logs')
+        .select('id, log_type, log_data, logged_at')
+        .eq('pet_id', activePet.id)
+        .order('logged_at', { ascending: false })
+        .limit(10),
+    ]);
+
+    if (petResult.error) {
+      throw petResult.error;
+    }
+
+    if (healthChecksResult.error) {
+      throw healthChecksResult.error;
+    }
+
+    if (healthLogsResult.error) {
+      throw healthLogsResult.error;
+    }
+
+    const latestHealthScreenings = (healthChecksResult.data ?? []) as HealthCheckContext[];
+    const latestHealthLogs = (healthLogsResult.data ?? []) as HealthLogContext[];
+    const latestScreeningsByType = latestHealthScreenings.reduce<Record<string, HealthCheckContext>>((acc, check) => {
+      if (!acc[check.check_type]) {
+        acc[check.check_type] = check;
+      }
+      return acc;
+    }, {});
+    const petProfile = petResult.data;
+    const contextSummary = buildOwnerContextSummary({
+      petProfile,
+      latestHealthScreenings,
+      latestHealthLogs,
+    });
+
+    return {
+      active_pet_id: activePet.id,
+      active_pet_name: activePet.name,
+      pet_profile: petProfile,
+      latest_health_screenings: latestHealthScreenings,
+      latest_health_logs: latestHealthLogs,
+      latest_screenings_by_type: latestScreeningsByType,
+      context_summary: contextSummary,
+      context_note: latestHealthScreenings.length
+        ? 'Use the pet profile and latest completed screenings as the current source of truth.'
+        : 'Use the pet profile as the current source of truth. No completed health screenings are saved yet.',
+    };
+  }, [activePet?.id, activePet?.name]);
+
   const sendPrompt = async (prompt: string) => {
     const trimmed = prompt.trim();
     if (!trimmed || isSending) return;
@@ -64,15 +321,46 @@ export default function ChatScreen() {
     setIsSending(true);
 
     try {
+      let ownerContext: Record<string, unknown> | null = null;
+      try {
+        ownerContext = await buildOwnerChatContext();
+      } catch (contextError) {
+        console.error('Failed to build owner chat context:', contextError);
+        ownerContext = {
+          active_pet_id: activePet?.id ?? null,
+          active_pet_name: activePet?.name ?? null,
+          pet_profile: null,
+          latest_health_screenings: [],
+          latest_health_logs: [],
+          latest_screenings_by_type: {},
+          context_summary: activePet?.name
+            ? `Selected pet name: ${activePet.name}. Full pet context could not be loaded before this request.`
+            : 'The latest pet context could not be loaded before this request.',
+          context_note: 'The latest pet context could not be loaded before this request.',
+        };
+      }
+
+      const groundedPrompt = buildOwnerGroundedPrompt(trimmed, ownerContext);
+
       const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_API_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: trimmed }),
+        body: JSON.stringify({
+          mode: 'owner',
+          message: groundedPrompt,
+          context: ownerContext,
+        }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        const botMsg = { id: `${Date.now()}-bot`, text: data.response, sender: 'bot' as const };
+        const parsedBotReply = extractTeleVetCta(typeof data.response === 'string' ? data.response : '');
+        const botMsg = {
+          id: `${Date.now()}-bot`,
+          text: parsedBotReply.text || 'No response returned.',
+          sender: 'bot' as const,
+          showTeleVetCta: parsedBotReply.showTeleVetCta,
+        };
         setMessages((prev) => [...prev, botMsg]);
       } else {
         const errorMsg = {
@@ -103,6 +391,13 @@ export default function ChatScreen() {
 
   const handleBack = () => {
     router.push('/');
+  };
+
+  const handleOpenTeleVet = () => {
+    router.push({
+      pathname: '/(tabs)/health',
+      params: { focus: 'televet' },
+    });
   };
 
   return (
@@ -143,15 +438,25 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <View style={[styles.messageRow, item.sender === 'user' ? styles.userRow : styles.botRow]}>
-              {item.sender === 'bot' ? (
-                <View style={styles.botAvatar}>
-                  <Ionicons name="paw-outline" size={16} color={Colors.primary.brown} />
+              {item.sender === 'bot' ? <View style={styles.botAvatar}>
+                <Ionicons name="paw-outline" size={16} color={Colors.primary.brown} />
+              </View> : null}
+              <View style={styles.messageContent}>
+                <View style={[styles.msgBox, item.sender === 'user' ? styles.userMsg : styles.botMsg]}>
+                  <Text style={[styles.msgText, item.sender === 'user' ? styles.userText : styles.botText]}>
+                    {item.text}
+                  </Text>
                 </View>
-              ) : null}
-              <View style={[styles.msgBox, item.sender === 'user' ? styles.userMsg : styles.botMsg]}>
-                <Text style={[styles.msgText, item.sender === 'user' ? styles.userText : styles.botText]}>
-                  {item.text}
-                </Text>
+                {item.sender === 'bot' && item.showTeleVetCta ? (
+                  <TouchableOpacity
+                    style={styles.teleVetCtaButton}
+                    onPress={handleOpenTeleVet}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="videocam-outline" size={16} color="#FFF9F2" />
+                    <Text style={styles.teleVetCtaText}>Open Tele-vet support</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             </View>
           )}
@@ -287,8 +592,10 @@ const styles = StyleSheet.create({
     marginRight: 8,
     marginBottom: 6,
   },
-  msgBox: {
+  messageContent: {
     maxWidth: '82%',
+  },
+  msgBox: {
     borderRadius: 22,
     overflow: 'hidden',
     borderWidth: 1,
@@ -312,6 +619,22 @@ const styles = StyleSheet.create({
   },
   botText: {
     color: Colors.primary.brown,
+  },
+  teleVetCtaButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.primary.brown,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  teleVetCtaText: {
+    color: '#FFF9F2',
+    fontSize: 13,
+    fontWeight: '700',
   },
   composerShell: {
     paddingHorizontal: 14,

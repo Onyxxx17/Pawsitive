@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -9,8 +9,9 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
@@ -35,12 +36,12 @@ type VetProfile = {
 
 export default function VetProfileScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const { vet: globalVet, vetId: globalVetId } = useVet();
+  const { vetId: globalVetId, clearVetSession } = useVet();
   const [vet, setVet] = useState<VetProfile | null>(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   // Form states
   const [name, setName] = useState('');
@@ -51,23 +52,17 @@ export default function VetProfileScreen() {
   const [languages, setLanguages] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
 
-  useEffect(() => {
-    fetchVetProfile();
-  }, []);
-
-  const fetchVetProfile = async () => {
+  const fetchVetProfile = useCallback(async () => {
     try {
-      // Try to get vetId from context first, then from params
-      const vetId = globalVetId || (params.vetId as string);
-      if (!vetId) {
-        Alert.alert('Error', 'No vet session found');
+      if (!globalVetId) {
+        setVet(null);
         return;
       }
 
       const { data, error } = await supabase
         .from('veterinarians')
         .select('*')
-        .eq('id', vetId)
+        .eq('id', globalVetId)
         .single();
 
       if (error) throw error;
@@ -86,15 +81,39 @@ export default function VetProfileScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [globalVetId]);
+
+  const performLogout = useCallback(async () => {
+    try {
+      setLoggingOut(true);
+      setVet(null);
+      setEditing(false);
+      await clearVetSession();
+      router.replace('/vet-login');
+    } catch (error: any) {
+      console.error('Error logging out veterinarian:', error);
+      Alert.alert('Error', error?.message || 'Failed to logout');
+    } finally {
+      setLoggingOut(false);
+    }
+  }, [clearVetSession, router]);
+
+  useEffect(() => {
+    fetchVetProfile();
+  }, [fetchVetProfile]);
+
+  useEffect(() => {
+    if (!globalVetId && !loggingOut) {
+      setVet(null);
+      router.replace('/vet-login');
+    }
+  }, [globalVetId, loggingOut, router]);
 
   const handleSaveProfile = async () => {
     try {
       setLoading(true);
 
-      // Try to get vetId from context first, then from params
-      const vetId = globalVetId || (params.vetId as string) || vet?.id;
-      if (!vetId) {
+      if (!globalVetId) {
         Alert.alert('Error', 'No vet session found');
         return;
       }
@@ -112,7 +131,7 @@ export default function VetProfileScreen() {
       const { error } = await supabase
         .from('veterinarians')
         .update(updates)
-        .eq('id', vetId);
+        .eq('id', globalVetId);
 
       if (error) throw error;
 
@@ -128,6 +147,17 @@ export default function VetProfileScreen() {
   };
 
   const handleLogout = () => {
+    if (Platform.OS === 'web') {
+      const confirmed = typeof globalThis.confirm === 'function'
+        ? globalThis.confirm('Are you sure you want to logout?')
+        : true;
+
+      if (confirmed) {
+        void performLogout();
+      }
+      return;
+    }
+
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -136,7 +166,9 @@ export default function VetProfileScreen() {
         { 
           text: 'Logout', 
           style: 'destructive',
-          onPress: () => router.replace('/landing')
+          onPress: () => {
+            void performLogout();
+          }
         },
       ]
     );
@@ -172,8 +204,7 @@ export default function VetProfileScreen() {
     try {
       setUploadingPhoto(true);
 
-      const vetId = globalVetId || (params.vetId as string) || vet?.id;
-      if (!vetId) {
+      if (!globalVetId) {
         Alert.alert('Error', 'No vet session found');
         return;
       }
@@ -184,7 +215,7 @@ export default function VetProfileScreen() {
       
       // Create file name
       const fileExt = imageUri.split('.').pop();
-      const fileName = `${vetId}-${Date.now()}.${fileExt}`;
+      const fileName = `${globalVetId}-${Date.now()}.${fileExt}`;
       const filePath = `vet-profiles/${fileName}`;
 
       // Upload to Supabase Storage
@@ -206,7 +237,7 @@ export default function VetProfileScreen() {
       const { error: updateError } = await supabase
         .from('veterinarians')
         .update({ profile_photo_url: publicUrl })
-        .eq('id', vetId);
+        .eq('id', globalVetId);
 
       if (updateError) throw updateError;
 
@@ -438,9 +469,12 @@ export default function VetProfileScreen() {
             <TouchableOpacity 
               style={styles.logoutButton}
               onPress={handleLogout}
+              disabled={loggingOut}
             >
               <Ionicons name="log-out-outline" size={18} color="#757575" />
-              <Text style={styles.logoutButtonText}>Logout</Text>
+              <Text style={styles.logoutButtonText}>
+                {loggingOut ? 'Logging out...' : 'Logout'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}

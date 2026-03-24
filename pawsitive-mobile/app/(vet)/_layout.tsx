@@ -1,31 +1,52 @@
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import React from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
-import { VetProvider } from '@/context/VetContext';
+import { useVet } from '@/context/VetContext';
 
 export default function VetTabLayout() {
-  return (
-    <VetProvider>
-      <Tabs
-        screenOptions={{
-          tabBarActiveTintColor: '#2196F3',
-          tabBarInactiveTintColor: Colors.neutral.textLight,
-          headerShown: false,
-          tabBarStyle: {
-            backgroundColor: '#FFF',
-            borderTopWidth: 1,
-            borderTopColor: Colors.neutral.border,
-            height: 88,
-            paddingBottom: 24,
-            paddingTop: 8,
-          },
-          tabBarLabelStyle: {
-            fontSize: 12,
-            fontWeight: '600',
-          },
+  const { loading, vetId } = useVet();
+
+  if (loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: Colors.neutral.background,
         }}
       >
+        <ActivityIndicator size="large" color="#2196F3" />
+      </View>
+    );
+  }
+
+  if (!vetId) {
+    return <Redirect href="/vet-login" />;
+  }
+
+  return (
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: '#2196F3',
+        tabBarInactiveTintColor: Colors.neutral.textLight,
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: '#FFF',
+          borderTopWidth: 1,
+          borderTopColor: Colors.neutral.border,
+          height: 88,
+          paddingBottom: 24,
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
@@ -71,7 +92,6 @@ export default function VetTabLayout() {
           ),
         }}
       />
-      </Tabs>
-    </VetProvider>
+    </Tabs>
   );
 }

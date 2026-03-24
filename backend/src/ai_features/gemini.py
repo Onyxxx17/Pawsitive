@@ -98,14 +98,90 @@ def reformat_json(result):
     repaired = clean_json(response.text)
     return repaired
 
-def process_message(message):
-    """Use Gemini to process user message and generate response"""
-    try:
-        response = _generate_with_fallback(
-            [message],
-            SYSTEM_PROMPTS["process_message"],
-            models=["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
+
+def build_chat_system_prompt(mode="owner", context=None):
+    if not context:
+        return SYSTEM_PROMPTS["process_message"]
+
+    base_prompt_key = "vet_context_chat" if mode == "vet" else "owner_context_chat"
+    context_blob = json.dumps(context, default=str, ensure_ascii=True)
+    context_summary = str(context.get("context_summary") or "").strip()
+    pet_profile = context.get("pet_profile") or context.get("pet") or {}
+    pet_name = (
+        pet_profile.get("name")
+        or context.get("active_pet_name")
+        or "missing"
+    )
+    screenings = context.get("latest_health_screenings") or context.get("recent_checks") or []
+    screening_types = []
+    for screening in screenings[:5]:
+        check_type = screening.get("check_type")
+        if check_type:
+            screening_types.append(str(check_type))
+
+    summary_lines = [
+        f"Current selected pet name: {pet_name}.",
+        f"Completed screening count available in context: {len(screenings)}.",
+    ]
+    if screening_types:
+        summary_lines.append(
+            "Most recent screening types in context: " + ", ".join(screening_types) + "."
         )
+
+    prompt_parts = [
+        f"{SYSTEM_PROMPTS[base_prompt_key]}\n\n",
+        "Context summary:\n",
+        "\n".join(summary_lines),
+    ]
+    if context_summary:
+        prompt_parts.extend([
+            "\nPlain-English pet context summary:\n",
+            context_summary,
+        ])
+    prompt_parts.extend([
+        "\n\nLatest structured context JSON:\n",
+        context_blob,
+        "\n\nUse this context as the latest available state for the conversation. "
+        "If something is absent from the JSON, explicitly say it is missing.",
+    ])
+    return "".join(prompt_parts)
+
+def process_message(message, context=None, mode="owner"):
+    """Use Gemini to process a chat message and generate a response."""
+    try:
+        system_prompt = build_chat_system_prompt(mode=mode, context=context)
+        if context:
+            context_summary = str(context.get("context_summary") or "").strip()
+            pet_profile = context.get("pet_profile") or context.get("pet") or {}
+            pet_name = (
+                pet_profile.get("name")
+                or context.get("active_pet_name")
+                or "missing"
+            )
+            structured_message_parts = [
+                f"Mode: {mode}\n",
+                f"Question: {message}\n",
+            ]
+            if context_summary:
+                structured_message_parts.append(
+                    f"Plain-English pet context summary: {context_summary}\n"
+                )
+            structured_message_parts.append(
+                "Answer using the latest structured context from the system instruction. "
+                f"If the question asks for the pet's name and it exists in context, say the name directly: {pet_name}."
+            )
+            structured_message = "".join(structured_message_parts)
+            response = _generate_with_fallback(
+                [structured_message],
+                system_prompt,
+                models=["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"]
+            )
+        else:
+            response = _generate_with_fallback(
+                [message],
+                system_prompt,
+                models=["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
+            )
     except Exception as e:
         response = str(e)
 
@@ -121,6 +197,9 @@ def generate_health_history_insights(payload):
     checks = payload.get("checks") or []
     logs = payload.get("logs") or []
     question = (payload.get("question") or "").strip()
+    request_mode = (payload.get("request_mode") or ("question" if question else "summary")).strip().lower()
+    if request_mode not in {"summary", "question"}:
+        request_mode = "question" if question else "summary"
 
     data_blob = json.dumps(
         {
@@ -133,9 +212,16 @@ def generate_health_history_insights(payload):
     )
 
     question_line = question if question else "No direct question provided. Summarize key trends and action items."
+    mode_instruction = (
+        "Return a broader health summary grounded in the saved data."
+        if request_mode == "summary"
+        else "Answer only the user's question. Do not prepend a snapshot summary unless the question explicitly asks for one."
+    )
     user_message = (
+        f"Request mode: {request_mode}\n"
         f"Pet name: {pet_name}\n"
         f"User question: {question_line}\n"
+        f"Instruction: {mode_instruction}\n"
         "Historical health data (JSON):\n"
         f"{data_blob}\n"
         "Write clear plain text for a pet owner. Avoid medical diagnosis."

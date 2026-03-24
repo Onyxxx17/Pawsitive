@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
 import { usePet } from '@/context/PetContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { useLocalSearchParams } from 'expo-router';
 
-const Card = ({ children, style }: any) => <View style={[styles.card, style]}>{children}</View>;
+const Card = ({ children, style, ...rest }: any) => <View style={[styles.card, style]} {...rest}>{children}</View>;
 type HealthCheckType = 'coat' | 'fit' | 'teeth' | 'poop' | 'face';
 const CHECK_TYPES: HealthCheckType[] = ['coat', 'fit', 'teeth', 'poop', 'face'];
 const CHECK_TYPE_META: Record<HealthCheckType, { label: string; icon: string; color: string }> = {
@@ -242,6 +243,8 @@ const renderMarkdownContent = (markdown: string) => {
 
 export default function HealthScreen() {
   const { activePet } = usePet();
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  const scrollViewRef = useRef<ScrollView | null>(null);
   const [healthChecks, setHealthChecks] = useState<HealthCheck[]>([]);
   const [healthLogs, setHealthLogs] = useState<HealthLog[]>([]);
   const [veterinarians, setVeterinarians] = useState<Veterinarian[]>([]);
@@ -252,6 +255,8 @@ export default function HealthScreen() {
   const [insightResponse, setInsightResponse] = useState('');
   const [insightError, setInsightError] = useState<string | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
+  const [startingConsultation, setStartingConsultation] = useState(false);
+  const [teleVetCardY, setTeleVetCardY] = useState<number | null>(null);
 
   const fetchHealthData = useCallback(async () => {
     if (!activePet?.id || activePet.id === 'default') return;
@@ -325,6 +330,15 @@ export default function HealthScreen() {
     setInsightError(null);
     setInsightLoading(false);
   }, [activePet?.id]);
+
+  useEffect(() => {
+    if (focus === 'televet' && teleVetCardY != null && !loading) {
+      scrollViewRef.current?.scrollTo({
+        y: Math.max(teleVetCardY - 20, 0),
+        animated: true,
+      });
+    }
+  }, [focus, loading, teleVetCardY]);
 
   const overallScore = useMemo(() => {
     if (healthChecks.length === 0) return 92;
@@ -528,8 +542,136 @@ export default function HealthScreen() {
 
   const recentChecks = checksByType.filter((item) => item.check).slice(0, 3);
 
-  const handleCallVet = () => {
-    Alert.alert('Connecting...', `Starting video call with ${currentVet.name}`);
+  const buildPetHealthSnapshot = useCallback(() => {
+    const recentScores = Object.fromEntries(
+      checksByType
+        .filter((item) => item.check)
+        .map((item) => [
+          item.type,
+          {
+            score: Number(item.check?.score ?? 0),
+            date: item.check?.created_at ?? null,
+          },
+        ]),
+    );
+
+    const activityValues = healthLogs
+      .filter((log) => log.log_type === 'activity')
+      .map((log) => Number(log.log_data?.duration_minutes ?? log.log_data?.duration_min))
+      .filter((value) => Number.isFinite(value));
+
+    const dietEntries = healthLogs.filter((log) => log.log_type === 'diet');
+    const recentAbnormalities = healthChecks
+      .filter((check) => Number(check.score) < 60)
+      .slice(0, 3)
+      .map((check) => `${check.check_type} score ${Math.round(Number(check.score))}/100`);
+
+    return {
+      pet_name: activePet?.name || 'Unknown pet',
+      species: activePet?.type?.toLowerCase?.() || 'dog',
+      breed: activePet?.breed || null,
+      weight_kg: activePet?.weight ? Number.parseFloat(String(activePet.weight).replace(/[^\d.]/g, '')) || null : null,
+      recent_scores: recentScores,
+      recent_logs_summary: {
+        avg_daily_food_entries: dietEntries.length,
+        avg_daily_walk_min: activityValues.length
+          ? Number((activityValues.reduce((sum, value) => sum + value, 0) / activityValues.length).toFixed(1))
+          : null,
+        recent_abnormalities: recentAbnormalities,
+      },
+      active_recommendations: scanTrends
+        .filter((trend) => trend.latest != null && trend.latest < 75)
+        .map((trend) => `${trend.label}: ${trend.status.note}`)
+        .slice(0, 3),
+    };
+  }, [activePet?.breed, activePet?.name, activePet?.type, activePet?.weight, checksByType, healthChecks, healthLogs, scanTrends]);
+
+  const handleCallVet = async () => {
+    if (!activePet?.id || activePet.id === 'default') {
+      Alert.alert('Select a pet first', 'Choose a pet profile before requesting a consultation.');
+      return;
+    }
+
+    if (!currentVet?.id || currentVet.id === 'mock') {
+      Alert.alert('No vet available', 'A veterinarian profile is not available right now. Please try again later.');
+      return;
+    }
+
+    setStartingConsultation(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        Alert.alert('Login required', 'Please log in before requesting a consultation.');
+        return;
+      }
+
+      const { data: existingAppointments, error: existingError } = await supabase
+        .from('appointments')
+        .select('id, scheduled_at, status, call_room_id')
+        .eq('user_id', user.id)
+        .eq('pet_id', activePet.id)
+        .eq('vet_id', currentVet.id)
+        .in('status', ['scheduled', 'in_progress'])
+        .order('scheduled_at', { ascending: false })
+        .limit(1);
+
+      if (existingError) {
+        throw existingError;
+      }
+
+      const existingAppointment = existingAppointments?.[0];
+      const petSnapshot = buildPetHealthSnapshot();
+
+      if (existingAppointment) {
+        const { error: reuseError } = await supabase
+          .from('appointments')
+          .update({
+            pet_snapshot_json: petSnapshot,
+            call_room_id: existingAppointment.call_room_id || `pawsitive-${Date.now()}`,
+          })
+          .eq('id', existingAppointment.id);
+
+        if (reuseError) {
+          throw reuseError;
+        }
+
+        Alert.alert(
+          'Consultation already open',
+          `${currentVet.name} already has an open consultation request for ${activePet.name}. The vet can answer it from their dashboard now.`,
+        );
+        return;
+      }
+
+      const roomId = `pawsitive-${currentVet.id}-${activePet.id}-${Date.now()}`;
+      const { error: insertError } = await supabase.from('appointments').insert({
+        user_id: user.id,
+        pet_id: activePet.id,
+        vet_id: currentVet.id,
+        scheduled_at: new Date().toISOString(),
+        duration_min: 30,
+        status: 'scheduled',
+        call_type: 'video',
+        call_room_id: roomId,
+        pet_snapshot_json: petSnapshot,
+      });
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      Alert.alert(
+        'Consultation requested',
+        `${currentVet.name} can now review ${activePet.name}'s saved health data and answer the consultation from the vet portal.`,
+      );
+    } catch (error: any) {
+      console.error('Error creating consultation request:', error);
+      Alert.alert('Request failed', String(error?.message || 'Could not start a consultation right now.'));
+    } finally {
+      setStartingConsultation(false);
+    }
   };
 
   const requestHealthInsights = async (question?: string) => {
@@ -559,6 +701,7 @@ export default function HealthScreen() {
           checks: insightsChecksPayload,
           logs: insightsLogsPayload,
           question: trimmedQuestion || null,
+          request_mode: trimmedQuestion ? 'question' : 'summary',
         }),
       });
 
@@ -603,7 +746,12 @@ export default function HealthScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {usingMockData ? (
           <View style={styles.mockDataBanner}>
             <Ionicons name="information-circle" size={20} color={Colors.primary.orangeDark} />
@@ -649,7 +797,12 @@ export default function HealthScreen() {
         </Card>
 
         <Text style={styles.sectionTitle}>Talk to a vet fast</Text>
-        <Card style={styles.teleVetCard}>
+        <Card
+          style={styles.teleVetCard}
+          onLayout={(event: any) => {
+            setTeleVetCardY(event.nativeEvent.layout.y);
+          }}
+        >
           <View style={styles.teleVetTop}>
             <View style={styles.teleVetCopy}>
               <Text style={styles.teleVetTitle}>Tele-vet support</Text>
@@ -679,9 +832,15 @@ export default function HealthScreen() {
           </View>
 
           <View style={styles.vetActions}>
-            <TouchableOpacity style={styles.callButton} onPress={handleCallVet}>
+            <TouchableOpacity
+              style={[styles.callButton, startingConsultation && styles.buttonDisabled]}
+              onPress={handleCallVet}
+              disabled={startingConsultation}
+            >
               <Ionicons name="videocam-outline" size={18} color="#FFF" />
-              <Text style={styles.callBtnText}>Start video consult</Text>
+              <Text style={styles.callBtnText}>
+                {startingConsultation ? 'Requesting consult...' : 'Start video consult'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryVetButton}>
               <Ionicons name="chatbubble-ellipses-outline" size={18} color={Colors.primary.brown} />

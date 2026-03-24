@@ -8,7 +8,7 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
@@ -41,17 +41,15 @@ type Appointment = {
 
 export default function VetDashboardScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
   const [vet, setVet] = useState<Veterinarian | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
-  const { setVet: setGlobalVet, setVetId, vetId: globalVetId } = useVet();
+  const { vet: savedVet, vetId } = useVet();
 
   const fetchVetProfile = useCallback(async () => {
     try {
-      const vetId = params.vetId as string;
       if (!vetId) {
         Alert.alert('Error', 'Invalid vet session');
         router.replace('/landing');
@@ -73,19 +71,16 @@ export default function VetDashboardScreen() {
       }
 
       setVet(data);
-      setGlobalVet(data);  // Set in context
-      setVetId(vetId);     // Set vet ID in context
     } catch (error: any) {
       console.error('Error fetching vet profile:', error);
       Alert.alert('Error', 'Failed to load profile');
     } finally {
       setLoading(false);
     }
-  }, [params.vetId, router, setGlobalVet, setVetId]);
+  }, [router, vetId]);
 
   const fetchAppointments = useCallback(async () => {
     try {
-      const vetId = globalVetId || (params.vetId as string);
       if (!vetId) return;
 
       const today = new Date();
@@ -162,7 +157,7 @@ export default function VetDashboardScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [globalVetId, params.vetId]);
+  }, [vetId]);
 
   useEffect(() => {
     fetchVetProfile();
@@ -216,7 +211,7 @@ export default function VetDashboardScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Welcome back,</Text>
-          <Text style={styles.vetName}>Dr. {vet?.name}</Text>
+          <Text style={styles.vetName}>Dr. {vet?.name || savedVet?.name}</Text>
         </View>
       </View>
 
@@ -293,7 +288,16 @@ export default function VetDashboardScreen() {
         ) : (
           <View style={styles.appointmentsList}>
             {upcomingAppointments.map((appointment) => (
-              <TouchableOpacity key={appointment.id} style={styles.appointmentCard}>
+              <TouchableOpacity
+                key={appointment.id}
+                style={styles.appointmentCard}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(vet)/consultations',
+                    params: { appointmentId: appointment.id },
+                  })
+                }
+              >
                 <View style={styles.appointmentTime}>
                   <Text style={styles.appointmentDate}>{formatDate(appointment.scheduled_at)}</Text>
                   <Text style={styles.appointmentTimeText}>{formatTime(appointment.scheduled_at)}</Text>

@@ -50,6 +50,8 @@ app.add_middleware(
 
 class Message(BaseModel):
     message: str
+    mode: str = "owner"
+    context: Optional[Dict[str, Any]] = None
 
 
 class HealthInsightsRequest(BaseModel):
@@ -57,6 +59,7 @@ class HealthInsightsRequest(BaseModel):
     checks: List[Dict[str, Any]] = Field(default_factory=list)
     logs: List[Dict[str, Any]] = Field(default_factory=list)
     question: Optional[str] = None
+    request_mode: str = "summary"
 
 @app.get("/")
 def index():
@@ -66,7 +69,11 @@ def index():
 async def chat(message: Message):
     try:
         # Process the user message using the AI logic
-        response = Gemini.process_message(message.message)
+        response = Gemini.process_message(
+            message.message,
+            context=message.context,
+            mode=message.mode,
+        )
         return {"response": response}
     except Exception as e:
         print(e)
