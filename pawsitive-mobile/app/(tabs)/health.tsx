@@ -516,7 +516,7 @@ export default function HealthScreen() {
 
   const insightsChecksPayload = useMemo(
     () =>
-      healthChecks.slice(0, 120).map((check) => ({
+      healthChecks.slice(0, 24).map((check) => ({
         id: check.id,
         check_type: check.check_type,
         score: check.score,
@@ -529,7 +529,7 @@ export default function HealthScreen() {
 
   const insightsLogsPayload = useMemo(
     () =>
-      healthLogs.slice(0, 120).map((log) => ({
+      healthLogs.slice(0, 30).map((log) => ({
         id: log.id,
         log_type: log.log_type,
         log_data: log.log_data ?? null,

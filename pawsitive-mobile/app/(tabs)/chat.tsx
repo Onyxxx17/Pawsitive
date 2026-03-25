@@ -64,11 +64,20 @@ type HealthLogContext = {
   logged_at: string;
 };
 
+const truncateContextText = (value: string, maxLength = 180) => {
+  const normalized = value.trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, Math.max(0, maxLength - 14)).trimEnd()}...`;
+};
+
 const formatOwnerCheckSummary = (check: HealthCheckContext) => {
   const scoreText = check.score != null ? `${Math.round(check.score)}/100` : 'no score';
   const details =
     typeof check.analysis_json?.feedback === 'string' && check.analysis_json.feedback.trim()
-      ? ` Notes: ${check.analysis_json.feedback.trim()}`
+      ? ` Notes: ${truncateContextText(check.analysis_json.feedback.trim(), 120)}`
       : '';
   return `${check.check_type}: ${scoreText}.${details}`;
 };
@@ -104,11 +113,11 @@ const buildOwnerContextSummary = ({
   }
 
   if (petProfile.existing_conditions?.length) {
-    lines.push(`Existing conditions: ${petProfile.existing_conditions.join(', ')}.`);
+    lines.push(`Existing conditions: ${truncateContextText(petProfile.existing_conditions.join(', '), 140)}.`);
   }
 
   if (petProfile.notes) {
-    lines.push(`Profile notes: ${petProfile.notes}.`);
+    lines.push(`Profile notes: ${truncateContextText(petProfile.notes, 180)}.`);
   }
 
   if (latestHealthScreenings.length) {
@@ -127,7 +136,7 @@ const buildOwnerContextSummary = ({
     const recentLogSummaries = latestHealthLogs.slice(0, 3).map((log) => {
       const logData =
         log.log_data && Object.keys(log.log_data).length > 0
-          ? JSON.stringify(log.log_data)
+          ? truncateContextText(JSON.stringify(log.log_data), 140)
           : 'no extra details';
       return `${log.log_type} on ${new Date(log.logged_at).toLocaleDateString('en-US', {
         month: 'short',
@@ -144,22 +153,16 @@ const buildOwnerGroundedPrompt = (
   question: string,
   ownerContext: Record<string, unknown> | null,
 ) => {
-  const contextSummary =
-    ownerContext && typeof ownerContext.context_summary === 'string'
-      ? ownerContext.context_summary.trim()
-      : '';
-
-  if (!contextSummary) {
-    return question;
+  const trimmedQuestion = question.trim();
+  if (!trimmedQuestion) {
+    return '';
   }
 
-  return [
-    'Current pet context:',
-    contextSummary,
-    '',
-    `Owner question: ${question}`,
-    'Answer using the pet context above when it contains the needed facts.',
-  ].join('\n');
+  if (!ownerContext) {
+    return trimmedQuestion;
+  }
+
+  return trimmedQuestion;
 };
 
 const extractTeleVetCta = (rawText: string) => {
