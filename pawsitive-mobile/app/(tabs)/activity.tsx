@@ -14,10 +14,12 @@ import { Colors } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
 import { usePet } from '../../context/PetContext';
 import { 
+  rehydrateWebReminderNotifications,
   registerForPushNotificationsAsync, 
   scheduleReminderNotification,
   cancelNotification,
 } from '@/utils/notifications';
+import { Platform } from 'react-native';
 import ReminderModal, { REMINDER_TYPES } from '@/components/ReminderModal';
 import CalendarImportModal from '@/components/CalendarImportModal';
 import CalendarEventCard from '@/components/CalendarEventCard';
@@ -148,6 +150,28 @@ export default function ActivityScreen() {
   useEffect(() => {
     registerForPushNotificationsAsync();
   }, []);
+
+  useEffect(() => {
+    const rehydrateWebSchedules = async () => {
+      if (Platform.OS !== 'web') return;
+      if (!activePet?.id || activePet.id === 'default') return;
+
+      const { data, error } = await supabase
+        .from('reminders')
+        .select('id, title, type, next_trigger_at, recurrence_type, recurrence_end_date, notification_id, is_active, is_completed')
+        .eq('pet_id', activePet.id)
+        .eq('is_active', true);
+
+      if (error) {
+        console.error('❌ Failed to fetch reminders for web rehydration:', error);
+        return;
+      }
+
+      await rehydrateWebReminderNotifications(data || [], activePet?.name);
+    };
+
+    rehydrateWebSchedules();
+  }, [activePet?.id, activePet?.name]);
 
   const changeWeek = (direction: number) => {
     const newWeekStart = new Date(weekStart);
