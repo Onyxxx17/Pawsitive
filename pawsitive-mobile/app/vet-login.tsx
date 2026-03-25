@@ -14,13 +14,44 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
+import { useVet } from '@/context/VetContext';
+
+type VeterinarianLoginResult = {
+  id: string;
+  name: string;
+  email: string;
+  clinic_name: string;
+  specializations: string[];
+  bio: string;
+  profile_photo_url: string;
+  license_number: string;
+  years_experience: number;
+  consultation_fee: number;
+  languages: string[];
+  rating: number;
+  total_reviews: number;
+  is_active: boolean;
+};
 
 export default function VetLoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { loading: vetSessionLoading, setVetSession, vetId } = useVet();
+  const defaultVetEmail = __DEV__
+    ? (process.env.EXPO_PUBLIC_DEV_VET_LOGIN_EMAIL ?? 'vet@example.com')
+    : '';
+  const defaultVetPassword = __DEV__
+    ? (process.env.EXPO_PUBLIC_DEV_VET_LOGIN_PW ?? 'test1234')
+    : '';
+  const [email, setEmail] = useState(defaultVetEmail);
+  const [password, setPassword] = useState(defaultVetPassword);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  React.useEffect(() => {
+    if (!vetSessionLoading && vetId) {
+      router.replace('/(vet)');
+    }
+  }, [router, vetId, vetSessionLoading]);
 
   const handleVetLogin = async () => {
     if (!email || !password) {
@@ -31,20 +62,26 @@ export default function VetLoginScreen() {
     try {
       setLoading(true);
 
-      // Check if this email exists in veterinarians table
-      const { data: vetData, error: vetError } = await supabase
-        .from('veterinarians')
-        .select('*')
-        .eq('email', email.toLowerCase())
-        .single();
+      const normalizedEmail = email.trim().toLowerCase();
+      const { data, error } = await supabase.rpc('verify_veterinarian_login', {
+        input_email: normalizedEmail,
+        input_password: password,
+      });
 
-      if (vetError || !vetData) {
-        Alert.alert('Access Denied', 'No veterinarian account found with this email.');
+      if (error) {
+        throw error;
+      }
+
+      const vetData = Array.isArray(data)
+        ? (data[0] as VeterinarianLoginResult | undefined)
+        : ((data as VeterinarianLoginResult | null) ?? undefined);
+
+      if (!vetData) {
+        Alert.alert('Access Denied', 'Incorrect email or password.');
         setLoading(false);
         return;
       }
 
-      // Check if vet is active
       if (!vetData.is_active) {
         Alert.alert(
           'Account Inactive',
@@ -54,14 +91,8 @@ export default function VetLoginScreen() {
         return;
       }
 
-      // TODO: Verify password against password_hash in veterinarians table
-      // For now, we'll use a simple check (you should implement proper password hashing)
-      
-      // Navigate to vet portal
-      router.replace({
-        pathname: '/(vet)',
-        params: { vetId: vetData.id }
-      });
+      await setVetSession(vetData);
+      router.replace('/(vet)');
 
     } catch (error: any) {
       console.error('Vet login error:', error);
@@ -80,7 +111,7 @@ export default function VetLoginScreen() {
         {/* Header */}
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.replace('/landing')}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.primary.brown} />
         </TouchableOpacity>
@@ -108,7 +139,7 @@ export default function VetLoginScreen() {
                 onChangeText={setEmail}
                 autoCapitalize="none"
                 keyboardType="email-address"
-                editable={!loading}
+                editable={!loading && !vetSessionLoading}
               />
             </View>
           </View>
@@ -125,7 +156,7 @@ export default function VetLoginScreen() {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
-                editable={!loading}
+                editable={!loading && !vetSessionLoading}
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons 
@@ -141,10 +172,10 @@ export default function VetLoginScreen() {
           <TouchableOpacity
             style={[styles.loginButton, loading && styles.loginButtonDisabled]}
             onPress={handleVetLogin}
-            disabled={loading}
+            disabled={loading || vetSessionLoading}
           >
             <Text style={styles.loginButtonText}>
-              {loading ? 'Logging in...' : 'Login'}
+              {loading || vetSessionLoading ? 'Logging in...' : 'Login'}
             </Text>
           </TouchableOpacity>
 

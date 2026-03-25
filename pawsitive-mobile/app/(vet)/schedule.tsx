@@ -8,7 +8,7 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
@@ -30,6 +30,7 @@ type Appointment = {
 };
 
 export default function VetScheduleScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams();
   const { vetId: globalVetId } = useVet();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -156,6 +157,12 @@ export default function VetScheduleScreen() {
       key={appointment.id}
       style={styles.appointmentCard}
       activeOpacity={0.7}
+      onPress={() =>
+        router.push({
+          pathname: '/(vet)/consultations',
+          params: { appointmentId: appointment.id },
+        })
+      }
     >
       <View style={styles.appointmentTime}>
         <Text style={styles.timeText}>{formatTime(appointment.scheduled_at)}</Text>

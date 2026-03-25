@@ -1,4 +1,5 @@
-import React, { createContext, useState, useContext, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, ReactNode, useEffect, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type VetData = {
   id: string;
@@ -19,19 +20,76 @@ type VetData = {
 
 type VetContextType = {
   vet: VetData | null;
-  setVet: (vet: VetData | null) => void;
   vetId: string | null;
-  setVetId: (id: string | null) => void;
+  loading: boolean;
+  setVetSession: (vet: VetData | null) => Promise<void>;
+  clearVetSession: () => Promise<void>;
 };
 
 const VetContext = createContext<VetContextType | undefined>(undefined);
+const VET_SESSION_STORAGE_KEY = '@pawsitive/vet-session';
 
 export const VetProvider = ({ children }: { children: ReactNode }) => {
   const [vet, setVet] = useState<VetData | null>(null);
-  const [vetId, setVetId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const rawSession = await AsyncStorage.getItem(VET_SESSION_STORAGE_KEY);
+        if (!rawSession || !mounted) {
+          return;
+        }
+
+        const parsedSession = JSON.parse(rawSession) as VetData | null;
+        if (parsedSession?.id && mounted) {
+          setVet(parsedSession);
+        }
+      } catch (error) {
+        console.error('Failed to restore veterinarian session:', error);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const setVetSession = useCallback(async (nextVet: VetData | null) => {
+    if (!nextVet) {
+      setVet(null);
+      await AsyncStorage.removeItem(VET_SESSION_STORAGE_KEY);
+      return;
+    }
+
+    setVet(nextVet);
+    await AsyncStorage.setItem(VET_SESSION_STORAGE_KEY, JSON.stringify(nextVet));
+  }, []);
+
+  const clearVetSession = useCallback(async () => {
+    setVet(null);
+    await AsyncStorage.removeItem(VET_SESSION_STORAGE_KEY);
+  }, []);
+
+  const value = useMemo<VetContextType>(
+    () => ({
+      vet,
+      vetId: vet?.id ?? null,
+      loading,
+      setVetSession,
+      clearVetSession,
+    }),
+    [clearVetSession, loading, setVetSession, vet],
+  );
 
   return (
-    <VetContext.Provider value={{ vet, setVet, vetId, setVetId }}>
+    <VetContext.Provider value={value}>
       {children}
     </VetContext.Provider>
   );

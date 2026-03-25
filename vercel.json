@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd pawsitive-mobile && npm install",
+  "buildCommand": "cd pawsitive-mobile && npx expo export --platform web",
+  "outputDirectory": "pawsitive-mobile/dist",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
