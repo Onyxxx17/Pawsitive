@@ -18,6 +18,18 @@ type Reminder = {
   recurrence_end_date?: string | null;
 };
 
+type HealthCheckRecord = {
+  created_at: string;
+};
+
+type ScanStreakSummary = {
+  current: number;
+  totalScanDays: number;
+  lastScanAt: string | null;
+  needsScanToday: boolean;
+  latestGapDays: number | null;
+};
+
 const REMINDER_TYPE_CONFIG: Record<string, { icon: string; color: string; bgColor: string; softColor: string }> = {
   feeding: { icon: 'restaurant', color: '#C8702F', bgColor: '#FFE5D0', softColor: '#FFF7F0' },
   walking: { icon: 'walk', color: '#237A6B', bgColor: '#DDF5F0', softColor: '#F5FCFA' },
@@ -34,11 +46,88 @@ const QUICK_ACTIONS = [
   { icon: 'pill', label: 'Meds', tint: '#F2E8FB' },
 ];
 
+const EMPTY_SCAN_STREAK: ScanStreakSummary = {
+  current: 0,
+  totalScanDays: 0,
+  lastScanAt: null,
+  needsScanToday: false,
+  latestGapDays: null,
+};
+
+const getStartOfLocalDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const getLocalDayKey = (date: Date) => {
+  const localDay = getStartOfLocalDay(date);
+  return `${localDay.getFullYear()}-${String(localDay.getMonth() + 1).padStart(2, '0')}-${String(localDay.getDate()).padStart(2, '0')}`;
+};
+
+const parseLocalDayKey = (dayKey: string) => {
+  const [year, month, day] = dayKey.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const getDayDifference = (laterDate: Date, earlierDate: Date) =>
+  Math.round(
+    (getStartOfLocalDay(laterDate).getTime() - getStartOfLocalDay(earlierDate).getTime()) /
+      (24 * 60 * 60 * 1000),
+  );
+
+const computeScanStreak = (checks: HealthCheckRecord[]): ScanStreakSummary => {
+  const uniqueDayKeys = Array.from(
+    new Set(
+      checks
+        .map((check) => {
+          const parsed = new Date(check.created_at);
+          return Number.isNaN(parsed.getTime()) ? null : getLocalDayKey(parsed);
+        })
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  if (!uniqueDayKeys.length) {
+    return EMPTY_SCAN_STREAK;
+  }
+
+  const uniqueDays = uniqueDayKeys.map(parseLocalDayKey).sort((a, b) => b.getTime() - a.getTime());
+  const today = getStartOfLocalDay(new Date());
+  const latestGapDays = getDayDifference(today, uniqueDays[0]);
+
+  if (latestGapDays > 1) {
+    return {
+      current: 0,
+      totalScanDays: uniqueDays.length,
+      lastScanAt: checks[0]?.created_at ?? uniqueDays[0].toISOString(),
+      needsScanToday: true,
+      latestGapDays,
+    };
+  }
+
+  let current = 1;
+
+  for (let index = 1; index < uniqueDays.length; index += 1) {
+    if (getDayDifference(uniqueDays[index - 1], uniqueDays[index]) !== 1) {
+      break;
+    }
+
+    current += 1;
+  }
+
+  return {
+    current,
+    totalScanDays: uniqueDays.length,
+    lastScanAt: checks[0]?.created_at ?? uniqueDays[0].toISOString(),
+    needsScanToday: latestGapDays === 1,
+    latestGapDays,
+  };
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const { activePet, loading: petsLoading } = usePet();
   const [upcomingReminders, setUpcomingReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scanStreak, setScanStreak] = useState<ScanStreakSummary>(EMPTY_SCAN_STREAK);
+  const [streakLoading, setStreakLoading] = useState(true);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -104,21 +193,93 @@ export default function HomeScreen() {
     }
   }, [activePet?.id]);
 
+  const fetchScanStreak = useCallback(async () => {
+    try {
+      setStreakLoading(true);
+
+      if (!activePet?.id || activePet.id === 'default') {
+        setScanStreak(EMPTY_SCAN_STREAK);
+        setStreakLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('health_checks')
+        .select('created_at')
+        .eq('pet_id', activePet.id)
+        .order('created_at', { ascending: false })
+        .limit(240);
+
+      if (error) throw error;
+
+      setScanStreak(computeScanStreak((data || []) as HealthCheckRecord[]));
+    } catch (error) {
+      console.error('Error fetching scan streak:', error);
+      setScanStreak(EMPTY_SCAN_STREAK);
+    } finally {
+      setStreakLoading(false);
+    }
+  }, [activePet?.id]);
+
   useEffect(() => {
     if (activePet?.id && activePet.id !== 'default') {
       fetchUpcomingReminders();
+      fetchScanStreak();
     }
-  }, [activePet?.id, fetchUpcomingReminders]);
+  }, [activePet?.id, fetchUpcomingReminders, fetchScanStreak]);
 
   useFocusEffect(
     useCallback(() => {
       if (activePet?.id && activePet.id !== 'default') {
         fetchUpcomingReminders();
+        fetchScanStreak();
       }
-    }, [activePet?.id, fetchUpcomingReminders]),
+    }, [activePet?.id, fetchUpcomingReminders, fetchScanStreak]),
   );
 
   const nextReminder = upcomingReminders[0];
+  const streakDisplay = useMemo(() => {
+    if (streakLoading) {
+      return {
+        value: '...',
+        title: 'Checking streak',
+        note: 'Looking at saved scan dates.',
+      };
+    }
+
+    if (!scanStreak.lastScanAt) {
+      return {
+        value: '0d',
+        title: 'Start a streak',
+        note: `Save one scan for ${activePet?.name || 'your pet'} to begin a daily streak.`,
+      };
+    }
+
+    if (scanStreak.current === 0) {
+      return {
+        value: '0d',
+        title: 'Streak paused',
+        note: `Last scan was ${new Date(scanStreak.lastScanAt).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        })}. Add a scan today to restart it.`,
+      };
+    }
+
+    if (scanStreak.needsScanToday) {
+      return {
+        value: `${scanStreak.current}d`,
+        title: `${scanStreak.current}-day streak`,
+        note: `Yesterday kept it alive. Save one scan today to reach ${scanStreak.current + 1} days.`,
+      };
+    }
+
+    return {
+      value: `${scanStreak.current}d`,
+      title: scanStreak.current === 1 ? '1-day streak' : `${scanStreak.current}-day streak`,
+      note: `A scan was saved today. Come back tomorrow to keep ${activePet?.name || 'your pet'} going.`,
+    };
+  }, [activePet?.name, scanStreak, streakLoading]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -200,8 +361,8 @@ export default function HomeScreen() {
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryChip}>
-              <Text style={styles.summaryValue}>{QUICK_ACTIONS.length}</Text>
-              <Text style={styles.summaryLabel}>Quick logs</Text>
+              <Text style={styles.summaryValue}>{streakLoading ? '...' : `${scanStreak.current}d`}</Text>
+              <Text style={styles.summaryLabel}>Scan streak</Text>
             </View>
             <View style={styles.summaryDivider} />
             <TouchableOpacity style={styles.summaryChip} onPress={() => router.push('/health')}>
@@ -209,6 +370,25 @@ export default function HomeScreen() {
               <Text style={styles.summaryLabel}>Open dashboard</Text>
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={styles.streakCard}
+            onPress={() => router.push('/camera')}
+            activeOpacity={0.86}
+          >
+            <View style={styles.streakIconWrap}>
+              <Ionicons name="flame" size={24} color="#D76F1D" />
+            </View>
+            <View style={styles.streakCopy}>
+              <Text style={styles.streakEyebrow}>Daily Scan Streak</Text>
+              <Text style={styles.streakTitle}>{streakDisplay.title}</Text>
+              <Text style={styles.streakNote}>{streakDisplay.note}</Text>
+            </View>
+            <View style={styles.streakMetric}>
+              <Text style={styles.streakMetricValue}>{streakDisplay.value}</Text>
+              <Text style={styles.streakMetricLabel}>current</Text>
+            </View>
+          </TouchableOpacity>
 
           <View style={styles.sectionHeaderRow}>
             <View>
@@ -440,6 +620,64 @@ const styles = StyleSheet.create({
     width: 1,
     height: 28,
     backgroundColor: '#DDD0C2',
+  },
+  streakCard: {
+    marginBottom: 22,
+    backgroundColor: '#FFF2E1',
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: '#EAD3BC',
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  streakIconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: '#FFE0BE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  streakCopy: {
+    flex: 1,
+  },
+  streakEyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+    color: '#A2622E',
+    marginBottom: 4,
+  },
+  streakTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 4,
+  },
+  streakNote: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#7A685C',
+  },
+  streakMetric: {
+    minWidth: 64,
+    alignItems: 'center',
+  },
+  streakMetricValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#D76F1D',
+    marginBottom: 2,
+  },
+  streakMetricLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    color: '#9D6A3E',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
