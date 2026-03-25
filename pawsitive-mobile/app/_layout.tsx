@@ -21,6 +21,7 @@ export default function RootLayout() {
             <Stack.Screen name="vet-login" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="(vet)" />
+            <Stack.Screen name="call" />
           </Stack>
         </PetProvider>
       </UserProvider>

@@ -39,6 +39,13 @@ type Appointment = {
   };
 };
 
+const unwrapSingle = <T,>(value: T | T[] | null | undefined): T | null => {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+  return value ?? null;
+};
+
 export default function VetDashboardScreen() {
   const router = useRouter();
   const [vet, setVet] = useState<Veterinarian | null>(null);
@@ -110,14 +117,22 @@ export default function VetDashboardScreen() {
       if (todayError) throw todayError;
 
       // Transform today's data
-      const transformedToday = (todayData || []).map((item: any) => ({
-        id: item.id,
-        scheduled_at: item.scheduled_at,
-        duration_min: item.duration_min,
-        status: item.status,
-        pet: Array.isArray(item.pet) ? item.pet[0] : item.pet,
-        user: Array.isArray(item.user) ? item.user[0] : item.user,
-      }));
+      const transformedToday = (todayData || [])
+        .map((item: any) => {
+          const pet = unwrapSingle(item.pet);
+          const user = unwrapSingle(item.user);
+          if (!pet || !user) return null;
+
+          return {
+            id: item.id,
+            scheduled_at: item.scheduled_at,
+            duration_min: item.duration_min,
+            status: item.status,
+            pet,
+            user,
+          } as Appointment;
+        })
+        .filter((item): item is Appointment => Boolean(item));
 
       setTodayAppointments(transformedToday);
 
@@ -142,14 +157,22 @@ export default function VetDashboardScreen() {
       if (upcomingError) throw upcomingError;
 
       // Transform upcoming data
-      const transformedUpcoming = (upcomingData || []).map((item: any) => ({
-        id: item.id,
-        scheduled_at: item.scheduled_at,
-        duration_min: item.duration_min,
-        status: item.status,
-        pet: Array.isArray(item.pet) ? item.pet[0] : item.pet,
-        user: Array.isArray(item.user) ? item.user[0] : item.user,
-      }));
+      const transformedUpcoming = (upcomingData || [])
+        .map((item: any) => {
+          const pet = unwrapSingle(item.pet);
+          const user = unwrapSingle(item.user);
+          if (!pet || !user) return null;
+
+          return {
+            id: item.id,
+            scheduled_at: item.scheduled_at,
+            duration_min: item.duration_min,
+            status: item.status,
+            pet,
+            user,
+          } as Appointment;
+        })
+        .filter((item): item is Appointment => Boolean(item));
 
       setUpcomingAppointments(transformedUpcoming);
     } catch (error: any) {
@@ -251,7 +274,7 @@ export default function VetDashboardScreen() {
                   {formatTime(getNextAppointment()!.scheduled_at)}
                 </Text>
                 <Text style={styles.statLabel}>Next Appointment</Text>
-                <Text style={styles.statSubtext}>{getNextAppointment()!.pet.name}</Text>
+                <Text style={styles.statSubtext}>{getNextAppointment()!.pet?.name || 'Unknown pet'}</Text>
               </View>
             </View>
           )}
@@ -303,9 +326,9 @@ export default function VetDashboardScreen() {
                   <Text style={styles.appointmentTimeText}>{formatTime(appointment.scheduled_at)}</Text>
                 </View>
                 <View style={styles.appointmentDetails}>
-                  <Text style={styles.petName}>{appointment.pet.name}</Text>
-                  <Text style={styles.ownerName}>Owner: {appointment.user.name}</Text>
-                  <Text style={styles.species}>{appointment.pet.species}</Text>
+                  <Text style={styles.petName}>{appointment.pet?.name || 'Unknown pet'}</Text>
+                  <Text style={styles.ownerName}>Owner: {appointment.user?.name || 'Unknown owner'}</Text>
+                  <Text style={styles.species}>{appointment.pet?.species || 'Unknown species'}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={Colors.neutral.textLight} />
               </TouchableOpacity>

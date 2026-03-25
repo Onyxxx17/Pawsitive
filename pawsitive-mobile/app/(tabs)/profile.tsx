@@ -124,7 +124,6 @@ export default function ProfileScreen() {
       console.error('Error fetching pets:', error);
       setPets([]);
     } else if (data) {
-      console.log('Fetched pets:', data);
       setPets(data);
       // Also refresh the global PetContext
       refreshPetContext();

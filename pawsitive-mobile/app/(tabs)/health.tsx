@@ -5,7 +5,7 @@ import { Colors } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
 import { usePet } from '@/context/PetContext';
 import { useFocusEffect } from '@react-navigation/native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 const Card = ({ children, style, ...rest }: any) => <View style={[styles.card, style]} {...rest}>{children}</View>;
 type HealthCheckType = 'coat' | 'fit' | 'teeth' | 'poop' | 'face';
@@ -244,6 +244,7 @@ const renderMarkdownContent = (markdown: string) => {
 export default function HealthScreen() {
   const { activePet } = usePet();
   const { focus } = useLocalSearchParams<{ focus?: string }>();
+  const router = useRouter();
   const scrollViewRef = useRef<ScrollView | null>(null);
   const [healthChecks, setHealthChecks] = useState<HealthCheck[]>([]);
   const [healthLogs, setHealthLogs] = useState<HealthLog[]>([]);
@@ -626,11 +627,11 @@ export default function HealthScreen() {
       const petSnapshot = buildPetHealthSnapshot();
 
       if (existingAppointment) {
+        const roomId = `pawsitive-${existingAppointment.id}`;
         const { error: reuseError } = await supabase
           .from('appointments')
           .update({
             pet_snapshot_json: petSnapshot,
-            call_room_id: existingAppointment.call_room_id || `pawsitive-${Date.now()}`,
           })
           .eq('id', existingAppointment.id);
 
@@ -638,34 +639,66 @@ export default function HealthScreen() {
           throw reuseError;
         }
 
-        Alert.alert(
-          'Consultation already open',
-          `${currentVet.name} already has an open consultation request for ${activePet.name}. The vet can answer it from their dashboard now.`,
-        );
+        Alert.alert('Consultation already open', `${currentVet.name} already has an open consultation request for ${activePet.name}.`, [
+          {
+            text: 'Open call room',
+            onPress: () => {
+              router.push({
+                pathname: '/call' as any,
+                params: {
+                  appointmentId: existingAppointment.id,
+                  roomId,
+                  role: 'owner',
+                  vetName: currentVet.name,
+                  petName: activePet?.name || 'Your pet',
+                },
+              });
+            },
+          },
+          { text: 'Later', style: 'cancel' },
+        ]);
         return;
       }
 
-      const roomId = `pawsitive-${currentVet.id}-${activePet.id}-${Date.now()}`;
-      const { error: insertError } = await supabase.from('appointments').insert({
-        user_id: user.id,
-        pet_id: activePet.id,
-        vet_id: currentVet.id,
-        scheduled_at: new Date().toISOString(),
-        duration_min: 30,
-        status: 'scheduled',
-        call_type: 'video',
-        call_room_id: roomId,
-        pet_snapshot_json: petSnapshot,
-      });
+      const { data: createdAppointment, error: insertError } = await supabase
+        .from('appointments')
+        .insert({
+          user_id: user.id,
+          pet_id: activePet.id,
+          vet_id: currentVet.id,
+          scheduled_at: new Date().toISOString(),
+          duration_min: 30,
+          status: 'scheduled',
+          call_type: 'video',
+          pet_snapshot_json: petSnapshot,
+        })
+        .select('id')
+        .single();
+
+      const roomId = `pawsitive-${createdAppointment?.id}`;
 
       if (insertError) {
         throw insertError;
       }
 
-      Alert.alert(
-        'Consultation requested',
-        `${currentVet.name} can now review ${activePet.name}'s saved health data and answer the consultation from the vet portal.`,
-      );
+      Alert.alert('Consultation requested', `${currentVet.name} can now review ${activePet.name}'s saved health data and answer from the vet portal.`, [
+        {
+          text: 'Open call room',
+          onPress: () => {
+            router.push({
+              pathname: '/call' as any,
+              params: {
+                appointmentId: createdAppointment?.id,
+                roomId,
+                role: 'owner',
+                vetName: currentVet.name,
+                petName: activePet?.name || 'Your pet',
+              },
+            });
+          },
+        },
+        { text: 'Later', style: 'cancel' },
+      ]);
     } catch (error: any) {
       console.error('Error creating consultation request:', error);
       Alert.alert('Request failed', String(error?.message || 'Could not start a consultation right now.'));

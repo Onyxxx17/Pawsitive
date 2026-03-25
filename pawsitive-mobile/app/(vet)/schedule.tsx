@@ -23,10 +23,17 @@ type Appointment = {
   pet: {
     name: string;
     species: string;
-  };
+  } | null;
   user: {
     name: string;
-  };
+  } | null;
+};
+
+const unwrapSingle = <T,>(value: T | T[] | null | undefined): T | null => {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+  return value ?? null;
 };
 
 export default function VetScheduleScreen() {
@@ -48,7 +55,6 @@ export default function VetScheduleScreen() {
       // Try to get vetId from context first, then from params
       const vetId = globalVetId || (params.vetId as string);
       if (!vetId) {
-        console.log('No vet ID found');
         setLoading(false);
         setRefreshing(false);
         return;
@@ -89,9 +95,9 @@ export default function VetScheduleScreen() {
         duration_min: item.duration_min,
         status: item.status,
         call_type: item.call_type,
-        pet: Array.isArray(item.pet) ? item.pet[0] : item.pet,
-        user: Array.isArray(item.user) ? item.user[0] : item.user,
-      }));
+        pet: unwrapSingle(item.pet),
+        user: unwrapSingle(item.user),
+      })).filter((item) => item.pet && item.user);
 
       setAppointments(transformedData);
     } catch (error: any) {
@@ -173,10 +179,10 @@ export default function VetScheduleScreen() {
         <View style={styles.appointmentHeader}>
           <View>
             <Text style={styles.petName}>
-              {appointment.pet.name}
+              {appointment.pet?.name || 'Unknown pet'}
             </Text>
             <Text style={styles.ownerName}>
-              Owner: {appointment.user.name}
+              Owner: {appointment.user?.name || 'Unknown owner'}
             </Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appointment.status) + '20' }]}>
@@ -194,7 +200,7 @@ export default function VetScheduleScreen() {
         <View style={styles.appointmentMeta}>
           <View style={styles.metaItem}>
             <Ionicons name="paw" size={14} color={Colors.neutral.textLight} />
-            <Text style={styles.metaText}>{appointment.pet.species}</Text>
+            <Text style={styles.metaText}>{appointment.pet?.species || 'Unknown species'}</Text>
           </View>
           <View style={styles.metaItem}>
             <Ionicons 

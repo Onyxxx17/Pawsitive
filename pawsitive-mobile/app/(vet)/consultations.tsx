@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '@/constants/Colors';
@@ -111,7 +111,8 @@ const statusMeta = (status: string) => {
 
 export default function VetConsultationsScreen() {
   const params = useLocalSearchParams<{ appointmentId?: string }>();
-  const { vet, vetId } = useVet();
+  const router = useRouter();
+  const { vet, vetId, loading: vetSessionLoading } = useVet();
 
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
@@ -143,18 +144,21 @@ export default function VetConsultationsScreen() {
 
   const fetchAppointments = useCallback(async () => {
     if (!vetId) {
-      setLoading(false);
-      setRefreshing(false);
+      // Wait for vet session hydration on first app load/login.
+      if (!vetSessionLoading) {
+        setLoading(false);
+        setRefreshing(false);
+      }
       return;
     }
 
     try {
       const start = new Date();
-      start.setDate(start.getDate() - 14);
+      start.setDate(start.getDate() - 365);
       start.setHours(0, 0, 0, 0);
 
       const end = new Date();
-      end.setDate(end.getDate() + 21);
+      end.setDate(end.getDate() + 30);
       end.setHours(23, 59, 59, 999);
 
       const { data, error } = await supabase
@@ -219,7 +223,7 @@ export default function VetConsultationsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [params.appointmentId, vetId]);
+  }, [params.appointmentId, vetId, vetSessionLoading]);
 
   const fetchAppointmentContext = useCallback(async () => {
     if (!selectedAppointment) {
@@ -357,13 +361,9 @@ export default function VetConsultationsScreen() {
         await saveConsultationNote(false);
       }
 
-      const roomId = selectedAppointment.call_room_id || `pawsitive-${selectedAppointment.id}-${Date.now()}`;
-      const payload: Record<string, any> = { status };
-      if (status === 'in_progress') {
-        payload.call_room_id = roomId;
-      }
-
-      const { error } = await supabase.from('appointments').update(payload).eq('id', selectedAppointment.id);
+      const roomId = `pawsitive-${selectedAppointment.id}`;
+      
+      const { error } = await supabase.from('appointments').update({ status }).eq('id', selectedAppointment.id);
       if (error) throw error;
 
       setAppointments((current) =>
@@ -372,7 +372,6 @@ export default function VetConsultationsScreen() {
             ? {
                 ...appointment,
                 status,
-                call_room_id: status === 'in_progress' ? roomId : appointment.call_room_id,
               }
             : appointment,
         ),
@@ -381,15 +380,40 @@ export default function VetConsultationsScreen() {
       Alert.alert(
         status === 'in_progress' ? 'Consultation live' : 'Consultation completed',
         status === 'in_progress'
-          ? `${selectedAppointment.pet.name}'s consultation is now in progress.\nRoom ID: ${roomId}`
+          ? `${selectedAppointment.pet.name}'s consultation is now in progress.`
           : 'The appointment was marked complete.',
       );
+
+      return status === 'in_progress' ? roomId : null;
     } catch (error: any) {
       console.error('Error updating appointment status:', error);
       Alert.alert('Update failed', String(error?.message || 'Could not update the consultation.'));
+      return null;
     } finally {
       setStatusLoading(false);
     }
+  };
+
+  const handleAnswerCall = async () => {
+    if (!selectedAppointment) return;
+
+    const roomId =
+      selectedAppointment.status === 'in_progress'
+        ? selectedAppointment.call_room_id
+        : await updateAppointmentStatus('in_progress');
+
+    if (!roomId) return;
+
+    router.push({
+      pathname: '/call' as any,
+      params: {
+        appointmentId: selectedAppointment.id,
+        roomId,
+        role: 'vet',
+        vetName: vet?.name || 'Veterinarian',
+        petName: selectedAppointment.pet.name,
+      },
+    });
   };
 
   const handleSendMessage = async () => {
@@ -562,7 +586,7 @@ export default function VetConsultationsScreen() {
               <TouchableOpacity
                 style={[styles.primaryButton, statusLoading && styles.buttonDisabled]}
                 onPress={() => {
-                  void updateAppointmentStatus('in_progress');
+                  void handleAnswerCall();
                 }}
                 disabled={statusLoading || selectedAppointment.status === 'completed'}
               >

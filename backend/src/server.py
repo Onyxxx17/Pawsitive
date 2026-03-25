@@ -1,11 +1,14 @@
 import sys
 import os
+import time
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import ai_features.gemini as Gemini # Assuming gemini.py has a function to process messages
 from typing import Any, Dict, List, Optional
+
+from agora_token_builder import RtcTokenBuilder
 
 app = FastAPI()
 
@@ -60,6 +63,20 @@ class HealthInsightsRequest(BaseModel):
     logs: List[Dict[str, Any]] = Field(default_factory=list)
     question: Optional[str] = None
     request_mode: str = "summary"
+
+
+class AgoraTokenRequest(BaseModel):
+    channel_name: str
+    uid: int = 0
+    role: str = "broadcaster"
+    expire_seconds: int = 3600
+
+
+def _resolve_agora_role(role: str) -> int:
+    normalized = (role or "").strip().lower()
+    if normalized in {"audience", "subscriber", "sub"}:
+        return 2
+    return 1
 
 @app.get("/")
 def index():
@@ -136,3 +153,79 @@ async def health_insights(payload: HealthInsightsRequest):
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agora-token")
+async def agora_token(payload: AgoraTokenRequest):
+    app_id = os.getenv("AGORA_APP_ID")
+    app_certificate = os.getenv("AGORA_APP_CERTIFICATE")
+    temp_token = os.getenv("AGORA_TEMP_TOKEN", "")
+
+    channel_name = (payload.channel_name or "").strip()
+    if not channel_name:
+        raise HTTPException(status_code=400, detail="channel_name is required.")
+
+    if not app_id:
+        raise HTTPException(
+            status_code=500,
+            detail="Missing AGORA_APP_ID in backend environment.",
+        )
+
+    if not app_certificate:
+        if not temp_token:
+            raise HTTPException(
+                status_code=500,
+                detail="Missing AGORA_APP_CERTIFICATE (or AGORA_TEMP_TOKEN fallback) in backend environment.",
+            )
+
+        return {
+            "app_id": app_id,
+            "token": temp_token,
+            "channel_name": channel_name,
+            "uid": payload.uid,
+            "expires_in": payload.expire_seconds,
+            "source": "temp_token_fallback",
+        }
+
+    if RtcTokenBuilder is None:
+        raise HTTPException(
+            status_code=500,
+            detail="agora-token-builder is not installed on backend.",
+        )
+
+    expire_seconds = max(60, min(int(payload.expire_seconds), 24 * 60 * 60))
+    current_ts = int(time.time())
+    privilege_expire_ts = current_ts + expire_seconds
+    role_value = _resolve_agora_role(payload.role)
+
+    try:
+        if hasattr(RtcTokenBuilder, "build_token_with_uid"):
+            token = RtcTokenBuilder.build_token_with_uid(
+                app_id,
+                app_certificate,
+                channel_name,
+                int(payload.uid),
+                role_value,
+                privilege_expire_ts,
+                privilege_expire_ts,
+            )
+        else:
+            token = RtcTokenBuilder.buildTokenWithUid(
+                app_id,
+                app_certificate,
+                channel_name,
+                int(payload.uid),
+                role_value,
+                privilege_expire_ts,
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate Agora token: {str(e)}")
+
+    return {
+        "app_id": app_id,
+        "token": token,
+        "channel_name": channel_name,
+        "uid": int(payload.uid),
+        "expires_in": expire_seconds,
+        "source": "generated",
+    }
