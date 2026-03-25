@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Image, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,7 +32,12 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
       
       {/* 📸 Logo Header */}
       <View style={styles.logoHeader}>
@@ -80,12 +85,14 @@ export default function LoginScreen() {
           <Text style={styles.signupText}>Sign Up</Text>
         </TouchableOpacity>
       </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 24, justifyContent: 'center' },
+  container: { flex: 1, backgroundColor: '#fff' },
+  scrollContent: { flexGrow: 1, padding: 24, justifyContent: 'center', paddingBottom: 36 },
   logoHeader: { alignItems: 'center', marginBottom: 30 },
   smallLogo: { width: 60, height: 60 },
   brandName: { fontSize: 24, fontWeight: '900', color: Colors.primary.orangeDark, marginTop: 5 },
@@ -99,7 +106,7 @@ const styles = StyleSheet.create({
   loginBtn: { backgroundColor: Colors.primary.brown, height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 5 },
   loginBtnDisabled: { opacity: 0.6 },
   loginText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 40 },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 28 },
   footerText: { color: Colors.neutral.textLight },
   signupText: { color: Colors.primary.orangeDark, fontWeight: 'bold' },
 });

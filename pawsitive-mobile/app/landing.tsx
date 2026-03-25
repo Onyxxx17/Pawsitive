@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
@@ -8,7 +8,12 @@ export default function LandingScreen() {
   const router = useRouter();
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
       <View style={styles.heroGlow} />
       <View style={styles.header}>
         <View style={styles.logoBadge}>
@@ -81,7 +86,7 @@ export default function LandingScreen() {
           </Text>
         </Text>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -90,6 +95,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8F4ED',
     paddingHorizontal: 24,
+  },
+  contentContainer: {
+    paddingBottom: 40,
   },
   heroGlow: {
     position: 'absolute',
@@ -228,11 +236,9 @@ const styles = StyleSheet.create({
     color: Colors.neutral.textLight,
   },
   footer: {
-    position: 'absolute',
-    bottom: 40,
-    left: 0,
-    right: 0,
     alignItems: 'center',
+    marginTop: 28,
+    marginBottom: 8,
   },
   footerText: {
     fontSize: 14,
