@@ -72,6 +72,37 @@ export default function ReminderModal({
   onShowEndDatePicker,
   onSubmit,
 }: ReminderModalProps) {
+  const formatTimeForWebInput = (date: Date) => {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  const [webTimeInput, setWebTimeInput] = React.useState(formatTimeForWebInput(time));
+
+  React.useEffect(() => {
+    if (visible) {
+      setWebTimeInput(formatTimeForWebInput(time));
+    }
+  }, [time, visible]);
+
+  const handleWebTimeChange = (text: string) => {
+    const sanitized = text.replace(/[^0-9:]/g, '').slice(0, 5);
+    setWebTimeInput(sanitized);
+
+    const match = sanitized.match(/^(\d{2}):(\d{2})$/);
+    if (!match) return;
+
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return;
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return;
+
+    const next = new Date(time);
+    next.setHours(hours, minutes, 0, 0);
+    onTimeChange(next);
+  };
+
   return (
     <Modal
       visible={visible}
@@ -142,19 +173,41 @@ export default function ReminderModal({
             <Text style={styles.label}>Time</Text>
             <TouchableOpacity
               style={styles.timeButton}
-              onPress={() => onShowTimePicker(true)}
+              onPress={() => {
+                if (Platform.OS !== 'web') {
+                  onShowTimePicker(true);
+                }
+              }}
             >
               <Ionicons name="time-outline" size={20} color={Colors.primary.brown} />
-              <Text style={styles.timeButtonText}>
-                {time.toLocaleTimeString('en-US', {
-                  hour: 'numeric',
-                  minute: '2-digit',
-                  hour12: true,
-                })}
-              </Text>
+              {Platform.OS === 'web' ? (
+                <TextInput
+                  style={styles.webTimeInput}
+                  value={webTimeInput}
+                  onChangeText={handleWebTimeChange}
+                  placeholder="HH:MM"
+                  placeholderTextColor={Colors.neutral.textLight}
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={5}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
+              ) : (
+                <Text style={styles.timeButtonText}>
+                  {time.toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                  })}
+                </Text>
+              )}
             </TouchableOpacity>
 
-            {showTimePicker && (
+            {Platform.OS === 'web' && (
+              <Text style={styles.webTimeHint}>Use 24-hour format (HH:MM), e.g. 08:30 or 19:45.</Text>
+            )}
+
+            {showTimePicker && Platform.OS !== 'web' && (
               <View style={styles.timePickerContainer}>
                 <DateTimePicker
                   value={time}
@@ -376,6 +429,18 @@ const styles = StyleSheet.create({
     color: Colors.primary.brown,
     fontWeight: '500',
     flex: 1,
+  },
+  webTimeInput: {
+    fontSize: 16,
+    color: Colors.primary.brown,
+    fontWeight: '500',
+    flex: 1,
+    paddingVertical: 0,
+  },
+  webTimeHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: Colors.neutral.textLight,
   },
   timePickerContainer: {
     backgroundColor: Colors.neutral.background,
