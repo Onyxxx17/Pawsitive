@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -16,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '@/constants/Colors';
 import { useVet } from '@/context/VetContext';
+import { buildBackendUrl, formatBackendRequestError, getBackendConfigurationError } from '@/lib/backend';
 import { supabase } from '@/lib/supabase';
 
 type OwnerProfile = {
@@ -30,10 +32,15 @@ type PetProfile = {
   name: string;
   species: string;
   breed: string | null;
+  gender: string | null;
+  date_of_birth: string | null;
   weight_kg: number | null;
   profile_photo_url: string | null;
   existing_conditions: string[] | null;
+  is_neutered: boolean | null;
+  microchip_id: string | null;
   notes: string | null;
+  updated_at: string | null;
 };
 
 type AppointmentRecord = {
@@ -85,6 +92,47 @@ const formatDateTime = (value: string) =>
     hour12: true,
   });
 
+const formatDateLabel = (value: string) =>
+  new Date(value).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+const formatSpeciesLabel = (value: string) =>
+  value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Unknown';
+
+const formatGenderLabel = (value: string | null) => {
+  if (!value) return 'Not recorded';
+  return value.charAt(0).toUpperCase() + value.slice(1);
+};
+
+const formatAgeLabel = (value: string | null) => {
+  if (!value) return 'Not recorded';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const now = new Date();
+  let years = now.getFullYear() - date.getFullYear();
+  let months = now.getMonth() - date.getMonth();
+
+  if (now.getDate() < date.getDate()) {
+    months -= 1;
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  if (years <= 0 && months <= 0) return 'Under 1 month';
+  if (years <= 0) return `${months} mo`;
+  if (months <= 0) return `${years} yr`;
+  return `${years} yr ${months} mo`;
+};
+
 const summarizeLog = (log: HealthLog) => {
   if (log.log_type === 'diet') {
     return `${log.log_data?.meal_type ?? log.log_data?.food_type ?? 'Diet'}${log.log_data?.amount_grams ? `, ${log.log_data.amount_grams}g` : ''}`;
@@ -135,11 +183,49 @@ export default function VetConsultationsScreen() {
   const [savingNote, setSavingNote] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [petProfileVisible, setPetProfileVisible] = useState(false);
 
   const selectedAppointment = useMemo(
     () => appointments.find((appointment) => appointment.id === selectedAppointmentId) ?? null,
     [appointments, selectedAppointmentId],
   );
+
+  const patientHighlights = useMemo(() => {
+    if (!selectedAppointment) return [];
+
+    return [
+      {
+        label: 'Age',
+        value: formatAgeLabel(selectedAppointment.pet.date_of_birth),
+        icon: 'time-outline' as const,
+      },
+      {
+        label: 'Weight',
+        value: selectedAppointment.pet.weight_kg != null ? `${selectedAppointment.pet.weight_kg} kg` : 'Not recorded',
+        icon: 'fitness-outline' as const,
+      },
+      {
+        label: 'Gender',
+        value: formatGenderLabel(selectedAppointment.pet.gender),
+        icon:
+          selectedAppointment.pet.gender === 'male'
+            ? ('male-outline' as const)
+            : selectedAppointment.pet.gender === 'female'
+              ? ('female-outline' as const)
+              : ('paw-outline' as const),
+      },
+      {
+        label: 'Microchip',
+        value: selectedAppointment.pet.microchip_id || 'Not recorded',
+        icon: 'hardware-chip-outline' as const,
+      },
+    ];
+  }, [selectedAppointment]);
+
+  const recentConcernSummary = useMemo(() => {
+    const abnormalities = selectedAppointment?.pet_snapshot_json?.recent_logs_summary?.recent_abnormalities;
+    return Array.isArray(abnormalities) ? abnormalities.filter(Boolean) : [];
+  }, [selectedAppointment]);
 
   const fetchAppointments = useCallback(async () => {
     if (!vetId) {
@@ -167,7 +253,7 @@ export default function VetConsultationsScreen() {
           call_type,
           call_room_id,
           pet_snapshot_json,
-          pet:pets(id, name, species, breed, weight_kg, profile_photo_url, existing_conditions, notes),
+          pet:pets(id, name, species, breed, gender, date_of_birth, weight_kg, profile_photo_url, existing_conditions, is_neutered, microchip_id, notes, updated_at),
           owner:profiles(id, name, phone_number, timezone)
         `)
         .eq('vet_id', vetId)
@@ -395,9 +481,9 @@ export default function VetConsultationsScreen() {
   const handleSendMessage = async () => {
     if (!selectedAppointment || !chatInput.trim() || chatLoading) return;
 
-    const backendUrl = process.env.EXPO_PUBLIC_BACKEND_API_URL;
-    if (!backendUrl) {
-      setChatError('Missing backend URL. Set EXPO_PUBLIC_BACKEND_API_URL in the app environment.');
+    const chatUrl = buildBackendUrl('/chat');
+    if (!chatUrl) {
+      setChatError(getBackendConfigurationError());
       return;
     }
 
@@ -408,7 +494,7 @@ export default function VetConsultationsScreen() {
     setChatError(null);
 
     try {
-      const response = await fetch(`${backendUrl}/chat`, {
+      const response = await fetch(chatUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -462,7 +548,7 @@ export default function VetConsultationsScreen() {
 
       setMessages((current) => [...current, { id: `assistant-${Date.now()}`, sender: 'assistant', text: reply.trim() }]);
     } catch (error: any) {
-      const detail = String(error?.message || 'PawPal could not answer right now.');
+      const detail = formatBackendRequestError(error, chatUrl);
       setChatError(detail);
       setMessages((current) => [
         ...current,
@@ -528,6 +614,148 @@ export default function VetConsultationsScreen() {
 
       {selectedAppointment ? (
         <>
+          <Modal
+            visible={petProfileVisible}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setPetProfileVisible(false)}
+          >
+            <View style={styles.modalBackdrop}>
+              <View style={styles.modalSheet}>
+                <View style={styles.modalHandle} />
+                <View style={styles.rowBetween}>
+                  <View>
+                    <Text style={styles.sectionTitle}>Patient profile</Text>
+                    <Text style={styles.modalSubtitle}>
+                      Consultation-specific pet file for {selectedAppointment.pet.name}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={() => setPetProfileVisible(false)}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="close" size={20} color={Colors.primary.brown} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView
+                  style={styles.modalScroll}
+                  contentContainerStyle={styles.modalContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={styles.profileHero}>
+                    {selectedAppointment.pet.profile_photo_url ? (
+                      <Image source={{ uri: selectedAppointment.pet.profile_photo_url }} style={styles.profileHeroImage} />
+                    ) : (
+                      <View style={styles.profileHeroFallback}>
+                        <Ionicons name="paw" size={30} color={Colors.primary.brown} />
+                      </View>
+                    )}
+
+                    <View style={styles.profileHeroText}>
+                      <Text style={styles.profileHeroName}>{selectedAppointment.pet.name}</Text>
+                      <Text style={styles.profileHeroMeta}>
+                        {formatSpeciesLabel(selectedAppointment.pet.species)}
+                        {selectedAppointment.pet.breed ? ` · ${selectedAppointment.pet.breed}` : ''}
+                      </Text>
+                      <Text style={styles.profileHeroMeta}>
+                        Owner: {selectedAppointment.owner.name || 'Unknown owner'}
+                      </Text>
+                      <Text style={styles.profileHeroMeta}>
+                        Call status: {statusMeta(selectedAppointment.status).label}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.metricGrid}>
+                    {patientHighlights.map((item) => (
+                      <View key={item.label} style={styles.metricCard}>
+                        <Ionicons name={item.icon} size={18} color={Colors.primary.orangeDark} />
+                        <Text style={styles.metricLabel}>{item.label}</Text>
+                        <Text style={styles.metricValue}>{item.value}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  <View style={styles.profileSectionCard}>
+                    <Text style={styles.profileSectionTitle}>Care snapshot</Text>
+                    <Text style={styles.profileSectionText}>
+                      Scheduled: {formatDateTime(selectedAppointment.scheduled_at)}
+                    </Text>
+                    <Text style={styles.profileSectionText}>
+                      Recent checks: {healthChecks.length} · Recent logs: {healthLogs.length}
+                    </Text>
+                    <Text style={styles.profileSectionText}>
+                      Neutered/Spayed:{' '}
+                      {selectedAppointment.pet.is_neutered == null
+                        ? 'Not recorded'
+                        : selectedAppointment.pet.is_neutered
+                          ? 'Yes'
+                          : 'No'}
+                    </Text>
+                    {selectedAppointment.pet.date_of_birth ? (
+                      <Text style={styles.profileSectionText}>
+                        Date of birth: {formatDateLabel(selectedAppointment.pet.date_of_birth)}
+                      </Text>
+                    ) : null}
+                    {selectedAppointment.pet.updated_at ? (
+                      <Text style={styles.profileSectionText}>
+                        Profile updated: {formatDateTime(selectedAppointment.pet.updated_at)}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  {recentConcernSummary.length ? (
+                    <View style={styles.profileSectionCard}>
+                      <Text style={styles.profileSectionTitle}>Current concerns from owner snapshot</Text>
+                      <View style={styles.tagRow}>
+                        {recentConcernSummary.map((item) => (
+                          <View key={item} style={styles.tagPill}>
+                            <Text style={styles.tagText}>{item}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {selectedAppointment.pet.existing_conditions?.length ? (
+                    <View style={styles.profileSectionCard}>
+                      <Text style={styles.profileSectionTitle}>Known medical conditions</Text>
+                      <View style={styles.tagRow}>
+                        {selectedAppointment.pet.existing_conditions.map((condition) => (
+                          <View key={condition} style={styles.conditionPill}>
+                            <Text style={styles.conditionText}>{condition}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {selectedAppointment.pet.notes ? (
+                    <View style={styles.profileSectionCard}>
+                      <Text style={styles.profileSectionTitle}>Owner notes</Text>
+                      <Text style={styles.profileSectionText}>{selectedAppointment.pet.notes}</Text>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.profileSectionCard}>
+                    <Text style={styles.profileSectionTitle}>Owner contact</Text>
+                    <Text style={styles.profileSectionText}>
+                      Phone: {selectedAppointment.owner.phone_number || 'No phone saved'}
+                    </Text>
+                    <Text style={styles.profileSectionText}>
+                      Timezone: {selectedAppointment.owner.timezone || 'Not recorded'}
+                    </Text>
+                    <Text style={styles.profileSectionText}>
+                      Room ID: {selectedAppointment.call_room_id || 'Pending room ID'}
+                    </Text>
+                  </View>
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+
           <View style={styles.section}>
             <View style={styles.rowBetween}>
               <Text style={styles.sectionTitle}>Active consultation</Text>
@@ -578,6 +806,23 @@ export default function VetConsultationsScreen() {
                 disabled={statusLoading}
               >
                 <Text style={styles.secondaryButtonText}>Mark complete</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.profileAccessCard}>
+              <View style={styles.profileAccessCopy}>
+                <Text style={styles.profileAccessTitle}>Patient file during the call</Text>
+                <Text style={styles.profileAccessText}>
+                  Open {`${selectedAppointment.pet.name}'s`} full profile without leaving this consultation.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.profileAccessButton}
+                onPress={() => setPetProfileVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="document-text-outline" size={16} color="#FFF" />
+                <Text style={styles.profileAccessButtonText}>Open profile</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -751,6 +996,12 @@ const styles = StyleSheet.create({
     color: Colors.primary.brown,
     marginBottom: 12,
   },
+  modalSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.neutral.textLight,
+    marginTop: -4,
+  },
   subsection: {
     fontSize: 14,
     fontWeight: '700',
@@ -835,6 +1086,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 4,
+  },
+  profileAccessCard: {
+    marginTop: 14,
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: '#F7EFE6',
+    borderWidth: 1,
+    borderColor: '#E8D8C7',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  profileAccessCopy: {
+    flex: 1,
+  },
+  profileAccessTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 4,
+  },
+  profileAccessText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.neutral.textLight,
+  },
+  profileAccessButton: {
+    minHeight: 40,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.primary.brown,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  profileAccessButtonText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '800',
   },
   primaryButton: {
     minHeight: 46,
@@ -963,4 +1254,161 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(67, 55, 47, 0.28)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    maxHeight: '86%',
+    backgroundColor: '#FFF9F3',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 22,
+    borderTopWidth: 1,
+    borderColor: '#E8DED3',
+  },
+  modalHandle: {
+    alignSelf: 'center',
+    width: 48,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#D7C8B8',
+    marginBottom: 14,
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1E6DA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalScroll: {
+    marginTop: 14,
+  },
+  modalContent: {
+    paddingBottom: 32,
+    gap: 14,
+  },
+  profileHero: {
+    borderRadius: 22,
+    padding: 16,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E9DED3',
+    flexDirection: 'row',
+    gap: 14,
+  },
+  profileHeroImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 22,
+  },
+  profileHeroFallback: {
+    width: 88,
+    height: 88,
+    borderRadius: 22,
+    backgroundColor: '#F4E7D9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileHeroText: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  profileHeroName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 6,
+  },
+  profileHeroMeta: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.neutral.textLight,
+    marginBottom: 2,
+  },
+  metricGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  metricCard: {
+    width: '48%',
+    minHeight: 108,
+    borderRadius: 18,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E9DED3',
+    padding: 14,
+    justifyContent: 'space-between',
+  },
+  metricLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    color: Colors.neutral.textLight,
+    marginTop: 10,
+  },
+  metricValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginTop: 8,
+  },
+  profileSectionCard: {
+    borderRadius: 20,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E9DED3',
+    padding: 16,
+  },
+  profileSectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    marginBottom: 10,
+  },
+  profileSectionText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.neutral.text,
+    marginBottom: 6,
+  },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tagPill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#FFF4E7',
+    borderWidth: 1,
+    borderColor: '#F0DAC3',
+  },
+  tagText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A5C1B',
+  },
+  conditionPill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F5EFE9',
+    borderWidth: 1,
+    borderColor: '#E6D8CA',
+  },
+  conditionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary.brown,
+  },
 });
+
