@@ -14,6 +14,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { createImageUploadPayload, isRemoteImageUri } from '@/lib/imageUpload';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function EditPetScreen() {
@@ -105,22 +106,19 @@ export default function EditPetScreen() {
   };
 
   const uploadPhoto = async (userId: string): Promise<string | null> => {
-    if (!photoUri || photoUri.startsWith('http')) {
+    if (!photoUri || isRemoteImageUri(photoUri)) {
       return photoUri; // Already uploaded
     }
 
     try {
       setUploadingPhoto(true);
-      const ext = (photoUri.split('.').pop() ?? 'jpg').toLowerCase().replace('jpg', 'jpeg');
-      const mimeType = `image/${ext}`;
-      const filePath = `pet_profiles/${userId}/${Date.now()}.${ext}`;
-
-      const formData = new FormData();
-      formData.append('file', { uri: photoUri, name: `photo.${ext}`, type: mimeType } as any);
+      const uploadBaseName = `photo-${Date.now()}`;
+      const { file, fileName, mimeType } = await createImageUploadPayload(photoUri, uploadBaseName);
+      const filePath = `pet_profiles/${userId}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('images')
-        .upload(filePath, formData, { 
+        .upload(filePath, file, {
           contentType: mimeType,
           upsert: false 
         });
@@ -159,7 +157,7 @@ export default function EditPetScreen() {
 
       // Upload photo if changed
       let photoUrl: string | null = photoUri;
-      if (photoUri && !photoUri.startsWith('http')) {
+      if (photoUri && !isRemoteImageUri(photoUri)) {
         photoUrl = await uploadPhoto(user.id);
       }
 
