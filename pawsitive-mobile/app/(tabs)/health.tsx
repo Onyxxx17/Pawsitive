@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, Act
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
+import { buildBackendUrl, formatBackendRequestError, getBackendConfigurationError } from '@/lib/backend';
 import { usePet } from '@/context/PetContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
@@ -43,6 +44,75 @@ type Veterinarian = {
   rating: number;
   total_reviews: number;
   consultation_fee: number;
+};
+
+type TrendPoint = {
+  id: string;
+  value: number;
+  shortDate: string;
+  fullDate: string;
+};
+
+type TrendScale = {
+  min: number;
+  max: number;
+  span: number;
+};
+
+const clampNumber = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const roundScaleDown = (value: number, step = 2) => Math.floor(value / step) * step;
+
+const roundScaleUp = (value: number, step = 2) => Math.ceil(value / step) * step;
+
+const getScoreTrendScale = (points: TrendPoint[]): TrendScale => {
+  if (!points.length) {
+    return { min: 0, max: 100, span: 100 };
+  }
+
+  const values = points.map((point) => point.value).filter((value) => Number.isFinite(value));
+  if (!values.length) {
+    return { min: 0, max: 100, span: 100 };
+  }
+
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const rawSpan = rawMax - rawMin;
+  const padding = rawSpan < 4 ? 6 : rawSpan < 10 ? 5 : Math.max(4, Math.ceil(rawSpan * 0.3));
+  const minSpan = rawSpan < 4 ? 16 : rawSpan < 10 ? 20 : Math.min(36, rawSpan + 12);
+
+  let min = rawMin - padding;
+  let max = rawMax + padding;
+
+  if (max - min < minSpan) {
+    const extra = (minSpan - (max - min)) / 2;
+    min -= extra;
+    max += extra;
+  }
+
+  if (min < 0) {
+    max = Math.min(100, max + Math.abs(min));
+    min = 0;
+  }
+
+  if (max > 100) {
+    min = Math.max(0, min - (max - 100));
+    max = 100;
+  }
+
+  min = clampNumber(roundScaleDown(min, 2), 0, 100);
+  max = clampNumber(roundScaleUp(max, 2), 0, 100);
+
+  if (max <= min) {
+    min = Math.max(0, roundScaleDown(rawMin - 8, 2));
+    max = Math.min(100, roundScaleUp(rawMax + 8, 2));
+  }
+
+  return {
+    min,
+    max,
+    span: Math.max(max - min, 1),
+  };
 };
 
 const formatTrendDelta = (delta: number | null, unitLabel: string) => {
@@ -88,6 +158,20 @@ const getTrendScoreStatus = (score: number | null) => {
   };
 };
 
+const formatTrendDate = (value: string) =>
+  new Date(value).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+
+const formatTrendDateTime = (value: string) =>
+  new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
 const MiniTrendBars = ({
   values,
   color,
@@ -121,6 +205,76 @@ const MiniTrendBars = ({
           </View>
         );
       })}
+    </View>
+  );
+};
+
+const AnnotatedTrendBars = ({
+  points,
+  color,
+}: {
+  points: TrendPoint[];
+  color: string;
+}) => {
+  if (!points.length) {
+    return <Text style={styles.trendEmptyText}>No trend data yet</Text>;
+  }
+
+  const scale = getScoreTrendScale(points);
+  const scaleMid = Math.round(scale.min + scale.span / 2);
+
+  return (
+    <View>
+      <View style={styles.annotatedTrendScaleRow}>
+        <View
+          style={[
+            styles.annotatedTrendScalePill,
+            {
+              backgroundColor: `${color}16`,
+              borderColor: `${color}38`,
+            },
+          ]}
+        >
+          <Text style={[styles.annotatedTrendScalePillText, { color }]}>{`Zoomed ${scale.min}-${scale.max}`}</Text>
+        </View>
+        <Text style={styles.annotatedTrendScaleText}>{`Low ${scale.min} | Mid ${scaleMid} | High ${scale.max}`}</Text>
+      </View>
+
+      <View style={styles.annotatedTrendWrap}>
+        {points.map((point, index) => {
+          const boundedValue = clampNumber(point.value, scale.min, scale.max);
+          const normalizedValue = (boundedValue - scale.min) / scale.span;
+          const heightPercent = Math.max(16, normalizedValue * 100);
+          const isLatest = index === points.length - 1;
+
+          return (
+            <View key={point.id} style={styles.annotatedTrendColumn}>
+              <View style={[styles.annotatedTrendScorePill, isLatest && styles.annotatedTrendScorePillLatest]}>
+                <Text style={[styles.annotatedTrendScoreText, isLatest && styles.annotatedTrendScoreTextLatest]}>
+                  {Math.round(point.value)}
+                </Text>
+              </View>
+              <View style={styles.annotatedTrendTrack}>
+                <View
+                  style={[
+                    styles.annotatedTrendFill,
+                    {
+                      height: `${heightPercent}%`,
+                      backgroundColor: color,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.annotatedTrendDate} numberOfLines={1}>
+                {point.shortDate}
+              </Text>
+              <Text style={styles.annotatedTrendDateHint} numberOfLines={1}>
+                {isLatest ? 'Latest' : `#${index + 1}`}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 };
@@ -442,19 +596,27 @@ export default function HealthScreen() {
   const scanTrends = useMemo(
     () =>
       CHECK_TYPES.map((type) => {
-        const values = healthChecks
+        const points = healthChecks
           .filter((check) => check.check_type === type)
           .map((check) => ({
+            id: check.id,
             value: Number(check.score),
             timestamp: new Date(check.created_at).getTime(),
+            shortDate: formatTrendDate(check.created_at),
+            fullDate: formatTrendDateTime(check.created_at),
           }))
           .filter((entry) => Number.isFinite(entry.value) && Number.isFinite(entry.timestamp))
           .sort((a, b) => a.timestamp - b.timestamp)
           .slice(-7)
-          .map((entry) => Number(entry.value.toFixed(1)));
+          .map((entry) => ({
+            id: entry.id,
+            value: Number(entry.value.toFixed(1)),
+            shortDate: entry.shortDate,
+            fullDate: entry.fullDate,
+          }));
 
-        const latest = values.length > 0 ? values[values.length - 1] : null;
-        const previous = values.length > 1 ? values[values.length - 2] : null;
+        const latest = points.length > 0 ? points[points.length - 1].value : null;
+        const previous = points.length > 1 ? points[points.length - 2].value : null;
         const delta = latest != null && previous != null ? Number((latest - previous).toFixed(1)) : null;
         const status = getTrendScoreStatus(latest);
 
@@ -463,10 +625,11 @@ export default function HealthScreen() {
           label: CHECK_TYPE_META[type].label,
           icon: CHECK_TYPE_META[type].icon,
           color: CHECK_TYPE_META[type].color,
-          values,
+          points,
           latest,
           delta,
           status,
+          latestFullDate: points.length ? points[points.length - 1].fullDate : null,
         };
       }),
     [healthChecks],
@@ -682,9 +845,9 @@ export default function HealthScreen() {
       return;
     }
 
-    const backendUrl = process.env.EXPO_PUBLIC_BACKEND_API_URL;
-    if (!backendUrl) {
-      setInsightError('Missing backend API URL. Set EXPO_PUBLIC_BACKEND_API_URL in your .env file.');
+    const insightUrl = buildBackendUrl('/health-insights');
+    if (!insightUrl) {
+      setInsightError(getBackendConfigurationError());
       return;
     }
 
@@ -693,7 +856,7 @@ export default function HealthScreen() {
     setInsightError(null);
 
     try {
-      const response = await fetch(`${backendUrl}/health-insights`, {
+      const response = await fetch(insightUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -728,7 +891,7 @@ export default function HealthScreen() {
       setInsightResponse(aiText.trim());
       setInsightError(null);
     } catch (error: any) {
-      const detail = String(error?.message || 'Failed to generate insights right now.');
+      const detail = formatBackendRequestError(error, insightUrl);
       setInsightError(detail);
     } finally {
       setInsightLoading(false);
@@ -865,7 +1028,7 @@ export default function HealthScreen() {
         <Text style={styles.sectionTitle}>Trend dashboard</Text>
         <Card style={styles.trendDashboardCard}>
           <Text style={styles.trendDashboardSubtitle}>
-            Past 30 days from saved scans and logs. Scan scores are plotted on a fixed 0-100 scale.
+            Past 30 days from saved scans and logs. Scan charts now use a labeled zoomed range so small score changes stand out.
           </Text>
 
           <View style={styles.scanTrendGrid}>
@@ -883,7 +1046,8 @@ export default function HealthScreen() {
                     <Text style={[styles.scanTrendStatusText, { color: trend.status.tone }]}>{trend.status.label}</Text>
                   </View>
                 </View>
-                <MiniTrendBars values={trend.values} color={trend.color} maxScale={100} />
+                <AnnotatedTrendBars points={trend.points} color={trend.color} />
+                {trend.latestFullDate ? <Text style={styles.scanTrendRecordedAt}>Latest saved {trend.latestFullDate}</Text> : null}
                 <Text style={styles.scanTrendNote}>{trend.status.note}</Text>
                 <Text style={styles.scanTrendDelta}>{formatTrendDelta(trend.delta, 'pts')}</Text>
               </View>
@@ -989,7 +1153,7 @@ export default function HealthScreen() {
                           hour: 'numeric',
                           minute: '2-digit',
                         })}
-                        {item.checkCount > 1 ? ` • ${item.checkCount} recent checks` : ''}
+                        {item.checkCount > 1 ? ` · ${item.checkCount} recent checks` : ''}
                       </Text>
                     </View>
                   </View>
@@ -1467,6 +1631,101 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.neutral.textLight,
     fontWeight: '600',
+  },
+  scanTrendRecordedAt: {
+    marginTop: 10,
+    fontSize: 11,
+    color: '#8B7D72',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  annotatedTrendScaleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 10,
+  },
+  annotatedTrendScalePill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+  },
+  annotatedTrendScalePillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  annotatedTrendScaleText: {
+    flex: 1,
+    fontSize: 11,
+    color: Colors.neutral.textLight,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  annotatedTrendWrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    minHeight: 142,
+  },
+  annotatedTrendColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  annotatedTrendScorePill: {
+    minWidth: 34,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#FFF4E7',
+    borderWidth: 1,
+    borderColor: '#E8D7C2',
+    marginBottom: 10,
+  },
+  annotatedTrendScorePillLatest: {
+    backgroundColor: '#FFF0DD',
+    borderColor: '#D8AE84',
+  },
+  annotatedTrendScoreText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.primary.brown,
+    textAlign: 'center',
+  },
+  annotatedTrendScoreTextLatest: {
+    color: Colors.primary.orangeDark,
+  },
+  annotatedTrendTrack: {
+    width: '100%',
+    height: 82,
+    borderRadius: 14,
+    backgroundColor: '#EFE4D7',
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E6D8C9',
+  },
+  annotatedTrendFill: {
+    width: '100%',
+    borderRadius: 14,
+  },
+  annotatedTrendDate: {
+    marginTop: 10,
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.primary.brown,
+  },
+  annotatedTrendDateHint: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: '700',
+    color: Colors.neutral.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   trendBars: {
     flexDirection: 'row',

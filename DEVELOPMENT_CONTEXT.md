@@ -395,7 +395,7 @@ Recommended:
 Manual startup:
 
 - Frontend: `cd pawsitive-mobile && npm start`
-- Backend: `cd backend && python -m fastapi run src/server.py`
+- Backend: `cd backend && python -m uvicorn server:app --app-dir src --host 0.0.0.0 --port 8000`
 
 Important note for physical-device Expo testing:
 

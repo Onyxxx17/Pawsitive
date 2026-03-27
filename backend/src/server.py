@@ -75,6 +75,8 @@ async def chat(message: Message):
             mode=message.mode,
         )
         return {"response": response}
+    except Gemini.AIConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -111,6 +113,8 @@ async def analyze(analysisTypes: List[str] = Form(...), photos: List[UploadFile]
             response = Gemini.analyze_pet_photo(image_part, analysisType)
             # response = {"field": "VALUE"} # debug usage
             results.append({"analysisType": analysisType, "result": response})
+        except Gemini.AIConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e))
         except Exception as e:
             print(e)
             raise HTTPException(status_code=500, detail=f"Error processing {photo.filename}: {str(e)}")
@@ -133,6 +137,8 @@ async def health_insights(payload: HealthInsightsRequest):
                 "has_question": bool((payload.question or "").strip()),
             },
         }
+    except Gemini.AIConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))

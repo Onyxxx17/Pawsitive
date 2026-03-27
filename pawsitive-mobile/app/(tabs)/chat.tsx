@@ -16,6 +16,7 @@ import { Colors } from '@/constants/Colors';
 import { useNavigation, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
+import { buildBackendUrl, formatBackendRequestError, getBackendConfigurationError } from '@/lib/backend';
 import { usePet } from '@/context/PetContext';
 
 const initialMessages = [
@@ -323,6 +324,8 @@ export default function ChatScreen() {
     setMessages((prev) => [...prev, userMsg]);
     setIsSending(true);
 
+    let chatUrl: string | null = null;
+
     try {
       let ownerContext: Record<string, unknown> | null = null;
       try {
@@ -345,7 +348,12 @@ export default function ChatScreen() {
 
       const groundedPrompt = buildOwnerGroundedPrompt(trimmed, ownerContext);
 
-      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_API_URL}/chat`, {
+      chatUrl = buildBackendUrl('/chat');
+      if (!chatUrl) {
+        throw new Error(getBackendConfigurationError());
+      }
+
+      const response = await fetch(chatUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -355,35 +363,42 @@ export default function ChatScreen() {
         }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const parsedBotReply = extractTeleVetCta(typeof data.response === 'string' ? data.response : '');
-        const botMsg = {
-          id: `${Date.now()}-bot`,
-          text: parsedBotReply.text || 'No response returned.',
-          sender: 'bot' as const,
-          showTeleVetCta: parsedBotReply.showTeleVetCta,
-        };
-        setMessages((prev) => [...prev, botMsg]);
-      } else {
-        const errorMsg = {
-          id: `${Date.now()}-error`,
-          text: 'Oops! Something went wrong. Please try again.',
-          sender: 'bot' as const,
-        };
-        setMessages((prev) => [...prev, errorMsg]);
+      const raw = await response.text();
+      let parsed: any = null;
+      try {
+        parsed = raw ? JSON.parse(raw) : null;
+      } catch {
+        parsed = raw;
       }
-    } catch {
+
+      if (!response.ok) {
+        const detail =
+          (typeof parsed === 'object' && (parsed?.detail || parsed?.error || parsed?.message)) ||
+          (typeof parsed === 'string' ? parsed : null) ||
+          `Failed to query PawPal (HTTP ${response.status}).`;
+        throw new Error(detail);
+      }
+
+      const parsedBotReply = extractTeleVetCta(typeof parsed?.response === 'string' ? parsed.response : '');
+      const botMsg = {
+        id: `${Date.now()}-bot`,
+        text: parsedBotReply.text || 'No response returned.',
+        sender: 'bot' as const,
+        showTeleVetCta: parsedBotReply.showTeleVetCta,
+      };
+      setMessages((prev) => [...prev, botMsg]);
+    } catch (error) {
+      const detail = formatBackendRequestError(error, chatUrl);
       const errorMsg = {
         id: `${Date.now()}-offline`,
-        text: 'Unable to connect. Please check your internet connection.',
+        text: detail,
         sender: 'bot' as const,
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsSending(false);
     }
-  };
+};
 
   const sendMessage = async () => {
     const trimmed = inputText.trim();

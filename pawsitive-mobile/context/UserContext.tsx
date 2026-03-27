@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
+import { createImageUploadPayload } from '@/lib/imageUpload';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -108,16 +109,12 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     if (!session) return { url: null, error: 'Not authenticated' };
 
     try {
-      const ext = (localUri.split('.').pop() ?? 'jpg').toLowerCase().replace('jpg', 'jpeg');
-      const path = `user_profiles/${session.user.id}/avatar.${ext}`;
-      const mimeType = `image/${ext}`;
-
-      const formData = new FormData();
-      formData.append('file', { uri: localUri, name: `avatar.${ext}`, type: mimeType } as any);
+      const { file, fileName, mimeType } = await createImageUploadPayload(localUri, 'avatar');
+      const path = `user_profiles/${session.user.id}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('images')
-        .upload(path, formData, { upsert: true, contentType: mimeType });
+        .upload(path, file, { upsert: true, contentType: mimeType });
 
       if (uploadError) return { url: null, error: uploadError.message };
 

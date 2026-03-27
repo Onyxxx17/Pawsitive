@@ -73,7 +73,7 @@ const CustomHeader = () => {
           {/* Dropdown Menu (Absolute Position) */}
           {expanded && (
             <View style={styles.dropdownMenu}>
-              {pets.map((pet) => (
+              {pets.map((pet: Pet) => (
                 <TouchableOpacity 
                   key={pet.id} 
                   style={styles.dropdownItem} 
@@ -157,7 +157,7 @@ const CustomHeader = () => {
 };
 
 // 📸 The "Nicer" Featured Camera Button
-const CustomCVButton = ({ onPress, isSelected }: { onPress?: () => void; isSelected: boolean }) => {
+const CustomCVButton = ({ onPress, isSelected, label }: { onPress?: (...args: any[]) => void; isSelected: boolean; label: string }) => {
   return (
   <TouchableOpacity
     style={styles.cameraButtonContainer}
@@ -171,6 +171,7 @@ const CustomCVButton = ({ onPress, isSelected }: { onPress?: () => void; isSelec
           color="#FFF"
         />
     </View>
+    <Text style={[styles.cameraButtonLabel, isSelected && styles.cameraButtonLabelActive]}>{label}</Text>
   </TouchableOpacity>
   );
 };
@@ -183,11 +184,12 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         header: () => <CustomHeader />,
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
         tabBarActiveTintColor: Colors.primary.brown,
         tabBarInactiveTintColor: Colors.neutral.textLight,
         tabBarStyle: styles.tabBar,
-        tabBarItemStyle: { height: '100%', justifyContent: 'center', alignItems: 'center' },
+        tabBarItemStyle: styles.tabBarItem,
+        tabBarLabelStyle: styles.tabBarLabel,
       }}
     >
       <Tabs.Screen
@@ -207,8 +209,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="camera"
         options={{
-          title: '',
-          tabBarButton: ({ onPress }) => <CustomCVButton onPress={onPress} isSelected={isCameraActive} />,
+          title: 'Scan',
+          tabBarButton: ({ onPress }) => <CustomCVButton onPress={onPress} isSelected={isCameraActive} label="Scan" />,
         }}
       />
       <Tabs.Screen
@@ -250,11 +252,15 @@ const styles = StyleSheet.create({
   headerActionButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EADCC9' },
   badge: { position: 'absolute', top: 5, right: 5, width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.health.poor },
 
-  tabBar: { height: Platform.OS === 'ios' ? 90 : 70, backgroundColor: '#ffffff', borderTopWidth: 0, elevation: 8, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: -2 }, position: 'absolute', bottom: 0, paddingTop: 10 },
+  tabBar: { height: Platform.OS === 'ios' ? 96 : 78, backgroundColor: '#ffffff', borderTopWidth: 0, elevation: 8, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: -2 }, position: 'absolute', bottom: 0, paddingTop: 8, paddingBottom: Platform.OS === 'ios' ? 16 : 10 },
+  tabBarItem: { height: '100%', justifyContent: 'center', alignItems: 'center', paddingTop: 4 },
+  tabBarLabel: { fontSize: 11, fontWeight: '700', marginTop: -2, marginBottom: 2 },
   
-  cameraButtonContainer: { top: -25, justifyContent: 'center', alignItems: 'center' },
+  cameraButtonContainer: { top: -18, justifyContent: 'center', alignItems: 'center', width: 78 },
   cameraButtonOuter: { width: 64, height: 64, borderRadius: 32, backgroundColor: Colors.primary.orangeDark, justifyContent: 'center', alignItems: 'center', borderWidth: 4, borderColor: '#ffffff', shadowColor: Colors.primary.orangeDark, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 8 },
   cameraButtonOuterActive: { backgroundColor: Colors.primary.brown, borderColor: '#FFF3E6', shadowColor: Colors.primary.brown },
+  cameraButtonLabel: { marginTop: 6, fontSize: 11, fontWeight: '700', color: Colors.neutral.textLight },
+  cameraButtonLabelActive: { color: Colors.primary.brown },
 
   // Sidebar Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-start' },

@@ -7,13 +7,13 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Platform,
   Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { createImageUploadPayload } from '@/lib/imageUpload';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function CreatePetScreen() {
@@ -61,17 +61,13 @@ export default function CreatePetScreen() {
 
     try {
       setUploadingPhoto(true);
-      const ext = (photoUri.split('.').pop() ?? 'jpg').toLowerCase().replace('jpg', 'jpeg');
-      const mimeType = `image/${ext}`;
-      const filePath = `pet_profiles/${userId}/${Date.now()}.${ext}`;
-
-      // FormData is the only reliable way to upload local file:// URIs on React Native
-      const formData = new FormData();
-      formData.append('file', { uri: photoUri, name: `photo.${ext}`, type: mimeType } as any);
+      const uploadBaseName = `photo-${Date.now()}`;
+      const { file, fileName, mimeType } = await createImageUploadPayload(photoUri, uploadBaseName);
+      const filePath = `pet_profiles/${userId}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('images')
-        .upload(filePath, formData, { 
+        .upload(filePath, file, {
           contentType: mimeType,
           upsert: false 
         });
