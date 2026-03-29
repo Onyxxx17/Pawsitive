@@ -16,10 +16,32 @@ import dotenv
 from prompts_config import SYSTEM_PROMPTS
 import json
 
+backend_env_path = os.path.abspath(os.path.join(current_dir, "..", "..", ".env"))
+dotenv.load_dotenv(dotenv_path=backend_env_path)
 dotenv.load_dotenv()
 
-# 1. Initialize the Client with your API Key
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+class AIConfigurationError(RuntimeError):
+    pass
+
+
+client = None
+
+
+def get_client():
+    global client
+
+    if client is not None:
+        return client
+
+    api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+    if not api_key:
+        raise AIConfigurationError(
+            "GEMINI_API_KEY is missing. Add it to backend/.env before using the AI endpoints."
+        )
+
+    client = genai.Client(api_key=api_key)
+    return client
 
 MAX_TEXT_FIELD_CHARS = 240
 MAX_LONG_TEXT_FIELD_CHARS = 800
@@ -324,7 +346,7 @@ def _generate_with_fallback(contents, system_instruction, models=None):
 
     for model in candidate_models:
         try:
-            response = client.models.generate_content(
+            response = get_client().models.generate_content(
                 model=model,
                 contents=contents,
                 config=types.GenerateContentConfig(system_instruction=system_instruction)
@@ -375,7 +397,7 @@ def clean_json(result):
 
 def reformat_json(result):
     """Use Gemini to fix malformed JSON so it can be parsed by json.loads()."""
-    response = client.models.generate_content(
+    response = get_client().models.generate_content(
         model="gemini-2.0-flash",
         contents=[result],
         config=types.GenerateContentConfig(

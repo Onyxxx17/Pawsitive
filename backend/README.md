@@ -35,10 +35,10 @@ Follow these steps to set up the virtual environment, install dependencies, and 
 1. Ensure the virtual environment is activated.
 2. Start the FastAPI server:
    ```bash
-   python -m fastapi run src/server.py
+   python -m uvicorn server:app --app-dir src --host 0.0.0.0 --port 8000
    ```
 3. Open your browser and navigate to the FastAPI documentation:
-   - Swagger UI: [http://0.0.0.0:8000/docs](http://0.0.0.0:8000/docs)
+   - Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ## 4. .env file
 1. At the <i>backend</i> directory, create an .env file containing <i>GEMINI_API_KEY</i> for AI features.

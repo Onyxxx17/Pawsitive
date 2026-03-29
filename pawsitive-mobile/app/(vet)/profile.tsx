@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
 import { useVet } from '@/context/VetContext';
+import { createImageUploadPayload } from '@/lib/imageUpload';
 import * as ImagePicker from 'expo-image-picker';
 
 type VetProfile = {
@@ -209,20 +210,14 @@ export default function VetProfileScreen() {
         return;
       }
 
-      // Convert image to blob
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-      
-      // Create file name
-      const fileExt = imageUri.split('.').pop();
-      const fileName = `${globalVetId}-${Date.now()}.${fileExt}`;
+      const { file, fileName, mimeType } = await createImageUploadPayload(imageUri, `${globalVetId}-${Date.now()}`);
       const filePath = `vet-profiles/${fileName}`;
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('user_profiles')
-        .upload(filePath, blob, {
-          contentType: 'image/jpeg',
+        .upload(filePath, file, {
+          contentType: mimeType,
           upsert: true,
         });
 

@@ -14,6 +14,7 @@ import { Colors } from '@/constants/Colors';
 import { PhotoUploader } from '@/components/healthAnalysis/PhotoUploader';
 import { AnalysisResult } from '@/components/healthAnalysis/AnalysisResult';
 import { supabase } from '@/lib/supabase';
+import { buildBackendUrl, formatBackendRequestError, getBackendConfigurationError } from '@/lib/backend';
 import { usePet } from '@/context/PetContext';
 
 type ScanResultEntry = {
@@ -187,6 +188,8 @@ export default function CameraScreen() {
 
   const uploadImages = async (images: Record<string, string>) => {
     setLoading(true);
+    let analysisUrl: string | null = null;
+
     try {
       const formData = new FormData();
       for (const [analysisType, uri] of Object.entries(images)) {
@@ -195,7 +198,12 @@ export default function CameraScreen() {
         formData.append('analysisTypes', analysisType);
       }
 
-      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_API_URL}/analyze`, {
+      analysisUrl = buildBackendUrl('/analyze');
+      if (!analysisUrl) {
+        throw new Error(getBackendConfigurationError());
+      }
+
+      const response = await fetch(analysisUrl, {
         method: 'POST',
         body: formData,
       });
@@ -219,8 +227,8 @@ export default function CameraScreen() {
         throw new Error(errorDetail);
       }
     } catch (error) {
-      console.error(error);
-      throw error;
+      console.error('Analyze request failed:', error);
+      throw new Error(formatBackendRequestError(error, analysisUrl));
     } finally {
       setLoading(false);
     }

@@ -41,7 +41,7 @@ if ($InstallDeps) {
 $backendCommand = @(
   "Set-Location '$backendDir'"
   '$Host.UI.RawUI.WindowTitle = ''Pawsitive Backend'''
-  $backendInstallStep + "& '$pythonCommand' -m fastapi run src/server.py"
+  $backendInstallStep + "& '$pythonCommand' -m uvicorn server:app --app-dir src --host 0.0.0.0 --port 8000"
 ) -join '; '
 
 $frontendInstallStep = ''
