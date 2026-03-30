@@ -78,8 +78,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "f6dd8c60-dc5c-4564-8427-bcb3bce53244"
+        "projectId": "f995dd7a-eebe-4956-91a4-97b2cfa8e1b7"
       }
-    }
+    },
+    "owner": "raylight3103"
   }
 }
