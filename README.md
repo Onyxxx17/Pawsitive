@@ -44,7 +44,10 @@ From the repository root:
 ```bash
 cd backend
 python3 -m venv venv
+# macOS/Linux
 source venv/bin/activate
+# Windows (PowerShell)
+# venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -104,7 +107,10 @@ EXPO_PUBLIC_AGORA_TEMP_TOKEN=
 Start Expo:
 
 ```bash
+# either command works
 npm start
+# or
+npx expo start
 ```
 
 Then choose:
@@ -137,6 +143,12 @@ If you use a physical phone:
 
 - Phone and computer must be on the same Wi-Fi
 - `EXPO_PUBLIC_BACKEND_API_URL` must use your computer's LAN IP (not `localhost`)
+- Restart Expo if you change `.env` values
+
+Helpful ways to find your local IP:
+
+- macOS: `ipconfig getifaddr en0` (Wi-Fi) or `ifconfig`
+- Windows: `ipconfig`
 
 ## 7. Windows Helper Script
 
@@ -158,6 +170,11 @@ Install deps while starting:
 
 - Confirm `pawsitive-mobile/.env` exists and variable names are exact.
 - Restart Expo after changing `.env`.
+
+### Backend won't start / module import issues
+
+- Confirm the virtual environment is activated before running `uvicorn`.
+- Reinstall dependencies with `pip install -r requirements.txt` inside `backend/`.
 
 ### "Backend URL is missing" or request failed
 
