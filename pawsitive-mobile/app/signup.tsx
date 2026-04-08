@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -75,17 +75,22 @@ export default function SignUpScreen() {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-        <Ionicons name="arrow-back" size={24} color={Colors.primary.brown} />
-      </TouchableOpacity>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color={Colors.primary.brown} />
+        </TouchableOpacity>
 
-      <View style={styles.header}>
-        <Text style={styles.welcome}>Join Pawsitive</Text>
-        <Text style={styles.sub}>Create your account to get started.</Text>
-      </View>
+        <View style={styles.header}>
+          <Text style={styles.welcome}>Join Pawsitive</Text>
+          <Text style={styles.sub}>Create your account to get started.</Text>
+        </View>
 
-      <View style={styles.form}>
+        <View style={styles.form}>
         <View style={styles.inputContainer}>
           <Ionicons name="person-outline" size={20} color={Colors.neutral.textLight} style={styles.icon} />
           <TextInput 
@@ -131,15 +136,17 @@ export default function SignUpScreen() {
             <Text style={styles.signupText}>Get Started</Text>
           )}
         </TouchableOpacity>
-      </View>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 24, justifyContent: 'center' },
-  backBtn: { position: 'absolute', top: 60, left: 24, zIndex: 10 },
-  header: { marginBottom: 40 },
+  container: { flex: 1, backgroundColor: '#fff' },
+  scrollContent: { flexGrow: 1, padding: 24, justifyContent: 'center', paddingBottom: 36 },
+  backBtn: { marginBottom: 20, alignSelf: 'flex-start' },
+  header: { marginBottom: 32 },
   welcome: { fontSize: 32, fontWeight: '800', color: Colors.primary.brown, marginBottom: 10 },
   sub: { fontSize: 16, color: Colors.neutral.textLight },
   form: { gap: 20 },
